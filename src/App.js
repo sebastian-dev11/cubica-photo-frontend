@@ -1,13 +1,7 @@
-import React from 'react';
+import LoginPage from './pages/LoginPage';
 
 function App() {
-  return (
-    <div style={{ textAlign: 'center', marginTop: '2rem' }}>
-      <h1>Bienvenido a Cubica Photo App</h1>
-      <p>La interfaz está funcionando correctamente.</p>
-    </div>
-  );
+  return <LoginPage />;
 }
 
 export default App;
-

@@ -1,22 +1,50 @@
-import LoginForm from '../components/LoginForm';
-import authService from '../services/authService';
+import React, { useState } from 'react';
+import { login } from '../services/authService';
 
 const LoginPage = () => {
-  const handleLogin = async (usuario, contraseña) => {
-    try {
-      const res = await authService.login(usuario, contraseña);
-      if (res.status === 200) {
-        localStorage.setItem('sesionId', usuario); // 🔐 para usar en la subida
-        return { success: true };
-      } else {
-        return { success: false, message: res.data };
-      }
-    } catch (err) {
-      return { success: false, message: 'Error de conexión con el servidor' };
+  const [usuario, setUsuario] = useState('');
+  const [contraseña, setContraseña] = useState('');
+  const [mensaje, setMensaje] = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const res = await login(usuario, contraseña);
+    setMensaje(res);
+
+    if (res === '✅ Acceso concedido') {
+      localStorage.setItem('sesionId', usuario);
+      // Aquí puedes redirigir, por ejemplo, usando React Router
     }
   };
 
-  return <LoginForm onLogin={handleLogin} />;
+  return (
+    <div style={{ maxWidth: '400px', margin: '80px auto', padding: '20px', border: '1px solid #ccc' }}>
+      <h2>Inicio de Sesión</h2>
+      <form onSubmit={handleSubmit}>
+        <div>
+          <label>Usuario:</label>
+          <input
+            type="text"
+            value={usuario}
+            onChange={(e) => setUsuario(e.target.value)}
+            required
+          />
+        </div>
+        <div style={{ marginTop: '10px' }}>
+          <label>Contraseña:</label>
+          <input
+            type="password"
+            value={contraseña}
+            onChange={(e) => setContraseña(e.target.value)}
+            required
+          />
+        </div>
+        <button type="submit" style={{ marginTop: '15px' }}>Ingresar</button>
+      </form>
+      {mensaje && <p style={{ marginTop: '15px' }}>{mensaje}</p>}
+    </div>
+  );
 };
 
 export default LoginPage;
+

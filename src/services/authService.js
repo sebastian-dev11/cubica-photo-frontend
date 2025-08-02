@@ -2,9 +2,7 @@ export async function login(usuario, contraseña) {
   try {
     const response = await fetch('https://cubica-photo-app.onrender.com/auth/login', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ usuario, contraseña }),
     });
 
@@ -14,6 +12,7 @@ export async function login(usuario, contraseña) {
       return '❌ Credenciales incorrectas';
     }
   } catch (error) {
-    return 'Error en la conexión con el servidor';
+    return '⚠️ Error en la conexión con el servidor';
   }
 }
+
