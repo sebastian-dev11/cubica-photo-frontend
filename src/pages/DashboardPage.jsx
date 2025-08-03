@@ -6,6 +6,7 @@ const DashboardPage = () => {
   const [ubicacion, setUbicacion] = useState('');
   const [imagen, setImagen] = useState(null);
   const [tipo, setTipo] = useState('previa');
+  const [observacion, setObservacion] = useState('');
   const [mensaje, setMensaje] = useState('');
   const [cargando, setCargando] = useState(false);
 
@@ -33,6 +34,7 @@ const DashboardPage = () => {
     formData.append('tipo', tipo);
     formData.append('sesionId', sesionId);
     formData.append('ubicacion', ubicacion);
+    formData.append('observacion', observacion);
 
     setCargando(true);
     try {
@@ -42,7 +44,14 @@ const DashboardPage = () => {
       });
 
       const data = await res.json();
-      setMensaje(data.mensaje || 'Imagen subida correctamente');
+      setMensaje(data.mensaje || 'Imagen y observación enviadas correctamente');
+
+      // Limpiar campos
+      setImagen(null);
+      setObservacion('');
+      
+      // Limpiar mensaje luego de 3 segundos
+      setTimeout(() => setMensaje(''), 3000);
     } catch (error) {
       console.error(error);
       setMensaje('Error al subir la imagen');
@@ -76,14 +85,13 @@ const DashboardPage = () => {
         position: 'relative',
       }}
     >
-      {/* 🔘 Botón de cerrar sesión */}
       <button
         onClick={handleCerrarSesion}
         style={{
           position: 'absolute',
           top: '20px',
           right: '20px',
-          backgroundColor: '#f44336',
+          backgroundColor: '#007BFF',
           color: '#fff',
           border: 'none',
           padding: '8px 14px',
@@ -144,6 +152,23 @@ const DashboardPage = () => {
               <option value="previa">Previa</option>
               <option value="posterior">Posterior</option>
             </select>
+          </div>
+
+          <div style={{ marginBottom: '15px' }}>
+            <label><strong>Observación (opcional):</strong></label>
+            <textarea
+              value={observacion}
+              onChange={(e) => setObservacion(e.target.value)}
+              placeholder="Observaciones de la imagen"
+              rows={3}
+              style={{
+                width: '100%',
+                padding: '8px',
+                borderRadius: '6px',
+                border: '1px solid #ccc',
+                resize: 'vertical'
+              }}
+            />
           </div>
 
           <button
