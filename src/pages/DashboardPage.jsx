@@ -34,7 +34,7 @@ const DashboardPage = () => {
     formData.append('tipo', tipo);
     formData.append('sesionId', sesionId);
     formData.append('ubicacion', ubicacion);
-    formData.append('observacion', observacion);
+    formData.append('observacion', observacion); // ahora también enviamos observación
 
     setCargando(true);
     try {
@@ -46,11 +46,11 @@ const DashboardPage = () => {
       const data = await res.json();
       setMensaje(data.mensaje || 'Imagen y observación enviadas correctamente');
 
-      // Limpiar campos
+      // ✅ Limpiar campos
       setImagen(null);
       setObservacion('');
-      
-      // Limpiar mensaje luego de 3 segundos
+      setTipo('previa');
+      document.getElementById('file-input').value = '';
       setTimeout(() => setMensaje(''), 3000);
     } catch (error) {
       console.error(error);
@@ -135,6 +135,7 @@ const DashboardPage = () => {
           <div style={{ marginBottom: '10px' }}>
             <label><strong>Selecciona imagen:</strong></label>
             <input
+              id="file-input"
               type="file"
               onChange={(e) => setImagen(e.target.files[0])}
               accept="image/*"
@@ -154,20 +155,14 @@ const DashboardPage = () => {
             </select>
           </div>
 
-          <div style={{ marginBottom: '15px' }}>
+          <div style={{ marginBottom: '10px' }}>
             <label><strong>Observación (opcional):</strong></label>
             <textarea
               value={observacion}
               onChange={(e) => setObservacion(e.target.value)}
-              placeholder="Observaciones de la imagen"
-              rows={3}
-              style={{
-                width: '100%',
-                padding: '8px',
-                borderRadius: '6px',
-                border: '1px solid #ccc',
-                resize: 'vertical'
-              }}
+              rows="3"
+              placeholder="Observación sobre la imagen"
+              style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ccc' }}
             />
           </div>
 
