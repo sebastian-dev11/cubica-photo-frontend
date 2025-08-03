@@ -46,7 +46,7 @@ const DashboardPage = () => {
       const data = await res.json();
       setMensaje(data.mensaje || 'Imagen y observación enviadas correctamente');
 
-      // ✅ Limpiar campos
+      // Limpiar campos
       setImagen(null);
       setObservacion('');
       setTipo('previa');
