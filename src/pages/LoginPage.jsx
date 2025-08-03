@@ -20,14 +20,14 @@ const LoginPage = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
       <div className="bg-white p-8 rounded shadow-md w-full max-w-md">
-        <div className="flex justify-center mb-6">
+        <div className="flex justify-center mb-4">
           <img
             src="https://res.cloudinary.com/drygjoxaq/image/upload/v1754102481/022e3445-0819-4ebc-962a-d9f0d772bf86_kmyqbw.jpg"
             alt="Cubica Logo"
-            className="h-24"
+            className="h-16 w-auto" // 👈 Tamaño reducido y mantiene proporción
           />
         </div>
-        <h2 className="text-2xl font-semibold text-center text-gray-800 mb-4">
+        <h2 className="text-xl font-semibold text-center text-gray-800 mb-6">
           Bienvenido a Cubica Photo App
         </h2>
         <form onSubmit={handleSubmit} className="space-y-4">
