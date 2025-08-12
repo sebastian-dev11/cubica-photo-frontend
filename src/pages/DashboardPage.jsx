@@ -11,6 +11,7 @@ const DashboardPage = () => {
   const [cargando, setCargando] = useState(false);
 
   const sesionId = localStorage.getItem('sesionId');
+  const nombreTecnico = localStorage.getItem('nombreTecnico') || 'Técnico';
 
   useEffect(() => {
     if (!sesionId) navigate('/');
@@ -18,6 +19,7 @@ const DashboardPage = () => {
 
   const handleCerrarSesion = () => {
     localStorage.removeItem('sesionId');
+    localStorage.removeItem('nombreTecnico');
     navigate('/');
   };
 
@@ -34,7 +36,7 @@ const DashboardPage = () => {
     formData.append('tipo', tipo);
     formData.append('sesionId', sesionId);
     formData.append('ubicacion', ubicacion);
-    formData.append('observacion', observacion); // ahora también enviamos observación
+    formData.append('observacion', observacion);
 
     setCargando(true);
     try {
@@ -46,7 +48,6 @@ const DashboardPage = () => {
       const data = await res.json();
       setMensaje(data.mensaje || 'Imagen y observación enviadas correctamente');
 
-      // Limpiar campos
       setImagen(null);
       setObservacion('');
       setTipo('previa');
@@ -71,6 +72,7 @@ const DashboardPage = () => {
 
     setTimeout(() => {
       localStorage.removeItem('sesionId');
+      localStorage.removeItem('nombreTecnico');
       navigate('/');
     }, 1200);
   };
@@ -106,7 +108,7 @@ const DashboardPage = () => {
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         <h1 style={{ color: '#333' }}>Dashboard</h1>
         <p style={{ marginBottom: '20px' }}>
-          Bienvenido, <strong>{sesionId}</strong>
+          Bienvenido, <strong>{nombreTecnico}</strong>
         </p>
 
         <form

@@ -6,13 +6,23 @@ export async function login(usuario, contraseña) {
       body: JSON.stringify({ usuario, contraseña }),
     });
 
+    const data = await response.json();
+
     if (response.ok) {
-      return '✅ Acceso concedido';
+      return {
+        mensaje: data.mensaje,
+        nombre: data.nombre
+      };
     } else {
-      return '❌ Credenciales incorrectas';
+      return {
+        mensaje: data.mensaje || 'Credenciales incorrectas',
+        nombre: null
+      };
     }
   } catch (error) {
-    return '⚠️ Error en la conexión con el servidor';
+    return {
+      mensaje: 'Error en la conexión con el servidor',
+      nombre: null
+    };
   }
 }
-

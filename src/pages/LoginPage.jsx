@@ -7,19 +7,34 @@ const LoginPage = () => {
   const [contraseña, setContraseña] = useState('');
   const [mensaje, setMensaje] = useState('');
   const [cargando, setCargando] = useState(false);
-  const navigate = useNavigate(); // 🧭
+  const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setCargando(true);
-    const res = await login(usuario, contraseña);
-    setMensaje(res);
-    setCargando(false);
 
-    if (res === '✅ Acceso concedido') {
-      localStorage.setItem('sesionId', usuario);
-      navigate('/dashboard'); // 🔀 redirección al dashboard
+    try {
+      const res = await login(usuario, contraseña); // res debe ser { mensaje, nombre }
+      console.log("Respuesta del backend:", res);
+
+      setMensaje(res.mensaje);
+
+      // Comparación exacta ignorando mayúsculas/minúsculas
+      if (res.mensaje && res.mensaje.toLowerCase() === "acceso concedido") {
+        localStorage.setItem('sesionId', usuario);
+        if (res.nombre) {
+          localStorage.setItem('nombreTecnico', res.nombre);
+        }
+        navigate('/dashboard');
+      } else {
+        console.warn("Credenciales incorrectas o mensaje inesperado.");
+      }
+    } catch (error) {
+      console.error("Error en login:", error);
+      setMensaje("Error en el servidor o conexión");
     }
+
+    setCargando(false);
   };
 
   return (
@@ -62,7 +77,7 @@ const LoginPage = () => {
 
         <form onSubmit={handleSubmit}>
           <div style={{ marginBottom: '15px', textAlign: 'left' }}>
-            <label style={{ fontWeight: 'bold', color: '#555' }}>Usuario:</label>
+            <label style={{ fontWeight: 'bold', color: '#555' }}>Ingresa tu Cédula:</label>
             <input
               type="text"
               value={usuario}
@@ -112,9 +127,18 @@ const LoginPage = () => {
             disabled={cargando}
           >
             {cargando ? (
-              <span className="spinner" style={{ display: 'inline-block' }}>
-                🔄
-              </span>
+              <div
+                className="modern-spinner"
+                style={{
+                  display: 'inline-block',
+                  width: '24px',
+                  height: '24px',
+                  border: '3px solid rgba(0,0,0,0.3)',
+                  borderTop: '3px solid #000',
+                  borderRadius: '50%',
+                  animation: 'spin 0.8s linear infinite',
+                }}
+              ></div>
             ) : (
               'Ingresar'
             )}
@@ -125,6 +149,13 @@ const LoginPage = () => {
           <p style={{ marginTop: '15px', fontWeight: 'bold', color: '#444' }}>{mensaje}</p>
         )}
       </div>
+
+      <style>
+        {`@keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }`}
+      </style>
     </div>
   );
 };
