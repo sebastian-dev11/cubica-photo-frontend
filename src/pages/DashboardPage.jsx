@@ -7,8 +7,11 @@ const DashboardPage = () => {
   const [imagen, setImagen] = useState(null);
   const [tipo, setTipo] = useState('previa');
   const [observacion, setObservacion] = useState('');
+  const [acta, setActa] = useState(null);
   const [mensaje, setMensaje] = useState('');
+  const [mensajeActa, setMensajeActa] = useState('');
   const [cargando, setCargando] = useState(false);
+  const [cargandoActa, setCargandoActa] = useState(false);
 
   const sesionId = localStorage.getItem('sesionId');
   const nombreTecnico = localStorage.getItem('nombreTecnico') || 'Técnico';
@@ -58,6 +61,40 @@ const DashboardPage = () => {
       setMensaje('Error al subir la imagen');
     } finally {
       setCargando(false);
+    }
+  };
+
+  const handleSubirActa = async (e) => {
+    e.preventDefault();
+
+    if (!acta) {
+      setMensajeActa('Por favor selecciona un archivo PDF');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('acta', acta);
+    formData.append('sesionId', sesionId);
+
+    setCargandoActa(true);
+    try {
+      const res = await fetch('https://cubica-photo-app.onrender.com/acta/subir', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setMensajeActa('Acta subida correctamente');
+      } else {
+        setMensajeActa(data.mensaje || 'Error al subir el acta');
+      }
+      setTimeout(() => setMensajeActa(''), 3000);
+    } catch (error) {
+      console.error(error);
+      setMensajeActa('Error en la conexión con el servidor');
+    } finally {
+      setCargandoActa(false);
     }
   };
 
@@ -111,6 +148,7 @@ const DashboardPage = () => {
           Bienvenido, <strong>{nombreTecnico}</strong>
         </p>
 
+        {/* FORMULARIO SUBIR IMAGEN */}
         <form
           onSubmit={handleSubirImagen}
           style={{
@@ -120,6 +158,7 @@ const DashboardPage = () => {
             padding: '20px',
             borderRadius: '10px',
             boxShadow: '0 4px 10px rgba(0,0,0,0.1)',
+            marginBottom: '20px'
           }}
         >
           <div style={{ marginBottom: '10px' }}>
@@ -179,26 +218,54 @@ const DashboardPage = () => {
               border: 'none',
               borderRadius: '6px',
               cursor: cargando ? 'not-allowed' : 'pointer',
-              fontWeight: 'bold',
-              position: 'relative',
+              fontWeight: 'bold'
             }}
           >
-            {cargando ? (
-              <span className="spinner" style={{
-                display: 'inline-block',
-                width: '18px',
-                height: '18px',
-                border: '3px solid #fff',
-                borderTop: '3px solid transparent',
-                borderRadius: '50%',
-                animation: 'spin 0.8s linear infinite',
-              }}></span>
-            ) : (
-              'Subir Imagen'
-            )}
+            {cargando ? 'Subiendo...' : 'Subir Imagen'}
           </button>
 
           {mensaje && <p style={{ marginTop: '10px', color: '#333' }}>{mensaje}</p>}
+        </form>
+
+        {/* FORMULARIO SUBIR ACTA */}
+        <form
+          onSubmit={handleSubirActa}
+          style={{
+            width: '100%',
+            maxWidth: '400px',
+            background: '#fff',
+            padding: '20px',
+            borderRadius: '10px',
+            boxShadow: '0 4px 10px rgba(0,0,0,0.1)'
+          }}
+        >
+          <div style={{ marginBottom: '10px' }}>
+            <label><strong>Subir Acta (PDF):</strong></label>
+            <input
+              type="file"
+              accept="application/pdf"
+              onChange={(e) => setActa(e.target.files[0])}
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={cargandoActa}
+            style={{
+              width: '100%',
+              padding: '10px',
+              backgroundColor: cargandoActa ? '#999' : '#fff200',
+              color: '#000',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: cargandoActa ? 'not-allowed' : 'pointer',
+              fontWeight: 'bold'
+            }}
+          >
+            {cargandoActa ? 'Subiendo...' : 'Subir Acta'}
+          </button>
+
+          {mensajeActa && <p style={{ marginTop: '10px', color: '#333' }}>{mensajeActa}</p>}
         </form>
 
         <button
@@ -217,13 +284,6 @@ const DashboardPage = () => {
           Generar PDF
         </button>
       </div>
-
-      <style>
-        {`@keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }`}
-      </style>
     </div>
   );
 };
