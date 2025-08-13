@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
 
 const DashboardPage = () => {
   const navigate = useNavigate();
@@ -12,6 +13,8 @@ const DashboardPage = () => {
   const [mensajeActa, setMensajeActa] = useState('');
   const [cargando, setCargando] = useState(false);
   const [cargandoActa, setCargandoActa] = useState(false);
+  const [tiendas, setTiendas] = useState([]);
+  const [selectedTienda, setSelectedTienda] = useState('');
 
   const sesionId = localStorage.getItem('sesionId');
   const nombreTecnico = localStorage.getItem('nombreTecnico') || 'Técnico';
@@ -19,6 +22,19 @@ const DashboardPage = () => {
   useEffect(() => {
     if (!sesionId) navigate('/');
   }, [navigate, sesionId]);
+
+  useEffect(() => {
+    // Cargar tiendas desde el backend
+    const fetchTiendas = async () => {
+      try {
+        const res = await axios.get('https://cubica-photo-app.onrender.com/tiendas');
+        setTiendas(res.data);
+      } catch (error) {
+        console.error('Error al obtener tiendas del backend:', error);
+      }
+    };
+    fetchTiendas();
+  }, []);
 
   const handleCerrarSesion = () => {
     localStorage.removeItem('sesionId');
@@ -28,8 +44,7 @@ const DashboardPage = () => {
 
   const handleSubirImagen = async (e) => {
     e.preventDefault();
-
-    if (!imagen || !tipo || !ubicacion) {
+    if (!imagen || !tipo || !selectedTienda) {
       setMensaje('Por favor completa todos los campos.');
       return;
     }
@@ -38,7 +53,7 @@ const DashboardPage = () => {
     formData.append('imagen', imagen);
     formData.append('tipo', tipo);
     formData.append('sesionId', sesionId);
-    formData.append('ubicacion', ubicacion);
+    formData.append('ubicacion', selectedTienda);
     formData.append('observacion', observacion);
 
     setCargando(true);
@@ -47,7 +62,6 @@ const DashboardPage = () => {
         method: 'POST',
         body: formData,
       });
-
       const data = await res.json();
       setMensaje(data.mensaje || 'Imagen y observación enviadas correctamente');
 
@@ -66,7 +80,6 @@ const DashboardPage = () => {
 
   const handleSubirActa = async (e) => {
     e.preventDefault();
-
     if (!acta) {
       setMensajeActa('Por favor selecciona un archivo PDF');
       return;
@@ -82,13 +95,8 @@ const DashboardPage = () => {
         method: 'POST',
         body: formData,
       });
-
       const data = await res.json();
-      if (res.ok) {
-        setMensajeActa('Acta subida correctamente');
-      } else {
-        setMensajeActa(data.mensaje || 'Error al subir el acta');
-      }
+      setMensajeActa(res.ok ? 'Acta subida correctamente' : data.mensaje || 'Error al subir el acta');
       setTimeout(() => setMensajeActa(''), 3000);
     } catch (error) {
       console.error(error);
@@ -99,12 +107,12 @@ const DashboardPage = () => {
   };
 
   const handleGenerarPDF = () => {
-    if (!ubicacion) {
-      setMensaje('Por favor ingresa la ubicación para generar el PDF.');
+    if (!selectedTienda) {
+      setMensaje('Por favor selecciona una tienda para generar el PDF.');
       return;
     }
 
-    const url = `https://cubica-photo-app.onrender.com/pdf/generar/${sesionId}?ubicacion=${encodeURIComponent(ubicacion)}`;
+    const url = `https://cubica-photo-app.onrender.com/pdf/generar/${sesionId}?tiendaId=${selectedTienda}`;
     window.open(url, '_blank');
 
     setTimeout(() => {
@@ -163,14 +171,18 @@ const DashboardPage = () => {
         >
           <div style={{ marginBottom: '10px' }}>
             <label><strong>Ubicación del D1:</strong></label>
-            <input
-              type="text"
-              value={ubicacion}
-              onChange={(e) => setUbicacion(e.target.value)}
-              required
-              placeholder="Ej. D1 El Tejar"
+            <select
+              value={selectedTienda}
+              onChange={(e) => setSelectedTienda(e.target.value)}
               style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ccc' }}
-            />
+            >
+              <option value="">Selecciona una tienda</option>
+              {tiendas.map(tienda => (
+                <option key={tienda._id} value={tienda._id}>
+                  {tienda.nombre} - {tienda.departamento}, {tienda.ciudad}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div style={{ marginBottom: '10px' }}>
