@@ -95,9 +95,27 @@ const InformesPage = () => {
 
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         <h1 style={{ color: '#333' }}>Informes</h1>
-        <p style={{ marginBottom: '20px' }}>
+        <p style={{ marginBottom: '10px' }}>
           Bienvenido, <strong>{nombreTecnico}</strong>
         </p>
+
+        {/* Botón para volver al dashboard */}
+        <button
+          onClick={() => navigate('/dashboard')}
+          style={{
+            marginBottom: '20px',
+            backgroundColor: '#28a745',
+            color: '#fff',
+            border: 'none',
+            padding: '10px 16px',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            fontWeight: 'bold',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.1)'
+          }}
+        >
+          ← Volver al dashboard
+        </button>
 
         <div
           style={{
@@ -221,23 +239,6 @@ const InformesPage = () => {
                       >
                         Ver
                       </button>
-
-                      {/* Botón Eliminar (opcional): requiere endpoint DELETE en backend
-                      <button
-                        onClick={() => handleEliminar(inf._id, inf.publicId)}
-                        style={{
-                          padding: '8px 12px',
-                          backgroundColor: '#dc3545',
-                          color: '#fff',
-                          border: 'none',
-                          borderRadius: '6px',
-                          cursor: 'pointer',
-                          fontWeight: 'bold'
-                        }}
-                      >
-                        Eliminar
-                      </button>
-                      */}
                     </td>
                   </tr>
                 ))}
@@ -291,7 +292,11 @@ const InformesPage = () => {
             </div>
           </div>
 
-          {mensaje && <p style={{ marginTop: '12px', color: '#333' }}>{mensaje}</p>}
+          {mensaje && (
+            <p style={{ marginTop: '12px', color: '#333' }}>
+              {mensaje}
+            </p>
+          )}
         </div>
       </div>
     </div>
