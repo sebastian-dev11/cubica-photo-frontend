@@ -4,7 +4,7 @@ import axios from 'axios';
 
 const DashboardPage = () => {
   const navigate = useNavigate();
-  const [ubicacion, setUbicacion] = useState('');
+  //const [ubicacion, setUbicacion] = useState('');
   const [imagen, setImagen] = useState(null);
   const [tipo, setTipo] = useState('previa');
   const [observacion, setObservacion] = useState('');
@@ -149,6 +149,24 @@ const DashboardPage = () => {
       >
         Cerrar sesión
       </button>
+
+      <button
+  onClick={() => navigate('/informes')}
+  style={{
+    marginTop: '12px',
+    padding: '10px 20px',
+    backgroundColor: '#ffffff',
+    color: '#000',
+    border: '1px solid #ccc',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    fontWeight: 'bold'
+  }}
+>
+  Ver Informes
+</button>
+
+      
 
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         <h1 style={{ color: '#333' }}>Dashboard</h1>
