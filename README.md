@@ -1,70 +1,178 @@
-# Getting Started with Create React App
+Cubica Photo App - Frontend
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+Frontend de la aplicación Cubica Photo App, desarrollada en React, que permite a los técnicos subir imágenes de instalaciones, agregar observaciones opcionales, subir actas en PDF y generar informes visuales.
 
-## Available Scripts
+Tecnologías y librerías
 
-In the project directory, you can run:
+React (v18+)
 
-### `npm start`
+React Router DOM para manejo de rutas
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+Axios para llamadas HTTP al backend
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+CSS inline y fuentes Roboto para estilo visual
 
-### `npm test`
+Navegador moderno con soporte para ES6+
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+Estructura del proyecto
+cubica-photo-app-frontend/
+├─ src/
+│  ├─ pages/
+│  │  ├─ LoginPage.jsx
+│  │  ├─ DashboardPage.jsx
+│  │  └─ InformesPage.jsx
+│  ├─ services/
+│  │  └─ authService.js
+│  ├─ App.js
+│  └─ index.js
+├─ public/
+│  └─ index.html
+├─ package.json
+└─ README.md
 
-### `npm run build`
+Descripción de los componentes
+1. LoginPage.jsx
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+Página de inicio de sesión.
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+Permite que los usuarios ingresen su cédula y contraseña.
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+Llama al servicio login del backend.
 
-### `npm run eject`
+Guarda sesionId y nombreTecnico en localStorage si el login es exitoso.
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+Redirige al dashboard.
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+Muestra mensajes de error y spinner de carga.
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+Estilo: degradado amarillo-blanco, formulario centrado con backdrop blur, logo de Cubica, tipografía Roboto.
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+2. DashboardPage.jsx
 
-## Learn More
+Página principal del dashboard.
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+Subida de imágenes con:
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+Selección de tienda (ubicacion)
 
-### Code Splitting
+Tipo de imagen (previa o posterior)
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+Observaciones opcionales
 
-### Analyzing the Bundle Size
+Subida de actas en PDF.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+Generación de PDF con todas las imágenes y actas asociadas a la tienda seleccionada.
 
-### Making a Progressive Web App
+Cierre de sesión que limpia localStorage.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+Botón para navegar a la página de informes.
 
-### Advanced Configuration
+Indicadores de carga y mensajes de estado.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+Estilo: degradado amarillo-blanco, formularios y botones con bordes redondeados y sombras suaves.
 
-### Deployment
+3. InformesPage.jsx
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+Página para visualizar y gestionar informes generados.
 
-### `npm run build` fails to minify
+Listado de informes con paginación y búsqueda por título.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+Muestra: título, generado por, fecha, si incluye acta PDF.
+
+Botón “Ver” abre el PDF en nueva pestaña.
+
+Navegación entre páginas de informes.
+
+Cierre de sesión y botón para volver al dashboard.
+
+Estilo consistente con el resto de la app.
+
+4. services/authService.js
+
+Servicio de autenticación.
+
+Función login(usuario, contraseña):
+
+Envía solicitud POST al backend (/auth/login).
+
+Retorna { mensaje, nombre }.
+
+Maneja errores de conexión y credenciales incorrectas.
+
+5. App.js
+
+Componente principal que define rutas.
+
+Rutas:
+
+/ → LoginPage
+
+/dashboard → DashboardPage
+
+/informes → InformesPage
+
+Permite navegación interna sin recargar la app.
+
+6. index.js
+
+Archivo de entrada principal.
+
+Renderiza <App /> dentro del root.
+
+Envuelto en <React.StrictMode> para habilitar comprobaciones adicionales durante el desarrollo.
+
+Instalación
+
+Clonar el repositorio:
+
+git clone <url-del-repositorio-frontend>
+cd cubica-photo-app-frontend
+
+
+Instalar dependencias:
+
+npm install
+
+
+Ejecutar la aplicación en modo desarrollo:
+
+npm start
+
+
+La app se ejecutará por defecto en http://localhost:3000.
+
+Uso
+
+Ingresar con cédula y contraseña en el login.
+
+En el dashboard:
+
+Seleccionar tienda.
+
+Subir imágenes (previa/posterior) con observaciones opcionales.
+
+Subir actas en PDF.
+
+Generar PDF consolidado.
+
+Consultar informes desde la sección “Informes”.
+
+Cerrar sesión para salir de la aplicación.
+
+Estilo visual
+
+Degradado amarillo a blanco en todas las páginas.
+
+Tipografía Roboto.
+
+Formularios y botones con bordes redondeados, sombras suaves y colores consistentes.
+
+Logo de Cubica siempre visible en login.
+
+Notas adicionales
+
+La app requiere que el backend esté corriendo en https://cubica-photo-app.onrender.com.
+
+Todos los datos subidos (imágenes y actas) se asocian al usuario y la tienda seleccionada.
+
+Los PDFs generados abren en una nueva pestaña del navegador.
