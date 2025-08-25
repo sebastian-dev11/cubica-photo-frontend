@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { login } from '../services/authService';
 import { useNavigate } from 'react-router-dom';
 
+const BG_URL = "https://blog.generaclatam.com/hubfs/shutterstock_93376264.jpg";
+
 const LoginPage = () => {
   const [usuario, setUsuario] = useState('');
   const [contraseña, setContraseña] = useState('');
@@ -38,124 +40,249 @@ const LoginPage = () => {
   };
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        paddingTop: '60px',
-        background: 'linear-gradient(to bottom, #fff200, #ffffff)',
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        fontFamily: 'Roboto, sans-serif',
-        color: '#636363ff'
-      }}
-    >
+    <div className="login-root">
+      {/* Fondo */}
       <div
+        className="bg"
         style={{
-          width: '100%',
-          maxWidth: '400px',
-          padding: '30px',
-          borderRadius: '15px',
-          backdropFilter: 'blur(12px)',
-          backgroundColor: 'rgba(255, 255, 255, 0.3)',
-          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.25)',
-          textAlign: 'center',
-          border: '1px solid rgba(255, 255, 255, 0.2)',
+          backgroundImage: `url("${BG_URL}")`,
         }}
-      >
-        <img
-          src="https://res.cloudinary.com/drygjoxaq/image/upload/v1754102481/022e3445-0819-4ebc-962a-d9f0d772bf86_kmyqbw.jpg"
-          alt="Logo Cubica"
-          style={{
-            width: '120px',
-            height: 'auto',
-            marginBottom: '15px',
-            filter: 'drop-shadow(0 0 4px #fff)',
-          }}
-        />
-        <h2 style={{ marginBottom: '20px', color: '#333' }}>Bienvenido a Cubica Photo App</h2>
+      />
+      {/* Overlay de marca */}
+      <div className="overlay" />
 
-        <form onSubmit={handleSubmit}>
-          <div style={{ marginBottom: '15px', textAlign: 'left' }}>
-            <label style={{ fontWeight: 'bold', color: '#555' }}>Ingresa tu Cédula:</label>
-            <input
-              type="text"
-              value={usuario}
-              onChange={(e) => setUsuario(e.target.value)}
-              required
-              style={{
-                width: '100%',
-                padding: '10px',
-                borderRadius: '8px',
-                border: '1px solid #ccc',
-                marginTop: '5px',
-                backgroundColor: '#fff',
-              }}
-            />
-          </div>
+      {/* Contenido */}
+      <div className="content">
+        <div className="card">
+          <img
+            src="https://res.cloudinary.com/drygjoxaq/image/upload/v1754102481/022e3445-0819-4ebc-962a-d9f0d772bf86_kmyqbw.jpg"
+            alt="Logo Cubica"
+            className="logo"
+          />
+          <h2 className="title">Bienvenido a Cubica Photo App</h2>
 
-          <div style={{ marginBottom: '20px', textAlign: 'left' }}>
-            <label style={{ fontWeight: 'bold', color: '#555' }}>Contraseña:</label>
-            <input
-              type="password"
-              value={contraseña}
-              onChange={(e) => setContraseña(e.target.value)}
-              required
-              style={{
-                width: '100%',
-                padding: '10px',
-                borderRadius: '8px',
-                border: '1px solid #ccc',
-                marginTop: '5px',
-                backgroundColor: '#fff',
-              }}
-            />
-          </div>
+          <form onSubmit={handleSubmit} className="form">
+            <div className="field">
+              <label className="label">Ingresa tu Cédula:</label>
+              <input
+                type="text"
+                value={usuario}
+                onChange={(e) => setUsuario(e.target.value)}
+                required
+                className="input"
+                placeholder="Ej: 1012345678"
+                inputMode="numeric"
+              />
+            </div>
 
-          <button
-            type="submit"
-            style={{
-              width: '100%',
-              padding: '12px',
-              backgroundColor: '#fff200',
-              color: '#000',
-              border: 'none',
-              borderRadius: '8px',
-              fontWeight: 'bold',
-              cursor: 'pointer',
-            }}
-            disabled={cargando}
-          >
-            {cargando ? (
-              <div
-                className="modern-spinner"
-                style={{
-                  display: 'inline-block',
-                  width: '24px',
-                  height: '24px',
-                  border: '3px solid rgba(0,0,0,0.3)',
-                  borderTop: '3px solid #000',
-                  borderRadius: '50%',
-                  animation: 'spin 0.8s linear infinite',
-                }}
-              ></div>
-            ) : (
-              'Ingresar'
-            )}
-          </button>
-        </form>
+            <div className="field">
+              <label className="label">Contraseña:</label>
+              <input
+                type="password"
+                value={contraseña}
+                onChange={(e) => setContraseña(e.target.value)}
+                required
+                className="input"
+                placeholder="••••••••"
+              />
+            </div>
 
-        {mensaje && (
-          <p style={{ marginTop: '15px', fontWeight: 'bold', color: '#444' }}>{mensaje}</p>
-        )}
+            <button type="submit" className="btn" disabled={cargando}>
+              {cargando ? (
+                <span className="modern-spinner" aria-label="Cargando" />
+              ) : (
+                'Ingresar'
+              )}
+            </button>
+          </form>
+
+          {mensaje && <p className="msg">{mensaje}</p>}
+        </div>
       </div>
 
-      <style>
-        {`@keyframes spin {
+      {/* Estilos */}
+      <style>{`
+        :root {
+          --gold: #fff200;
+          --ink: #0a0a0a;
+          --text: #333333;
+          --panel: rgba(255,255,255,0.30); /* translucencia base (fallback) */
+        }
+
+        /* Contenedor raíz con safe areas (móviles con notch) */
+        .login-root {
+          position: relative;
+          min-height: 100vh;
+          width: 100%;
+          padding: max(12px, env(safe-area-inset-top, 0px)) 12px max(12px, env(safe-area-inset-bottom, 0px));
+          box-sizing: border-box;
+          font-family: Roboto, system-ui, -apple-system, Segoe UI, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+          color: #636363ff;
+          overflow: hidden;
+        }
+
+        /* Fondo imagen */
+        .bg {
+          position: fixed;
+          inset: 0;
+          background-size: cover;
+          background-position: center;
+          background-repeat: no-repeat;
+          z-index: -2;
+          /* No usar background-attachment: fixed en mobile (performance/iOS). */
+          transform: translateZ(0); /* hint de performance */
+        }
+
+        /* Overlay: degradado de marca + ligero oscurecido para contraste */
+        .overlay {
+          position: fixed;
+          inset: 0;
+          z-index: -1;
+          background:
+            linear-gradient(to bottom, rgba(255,242,0,0.35), rgba(255,242,0,0.05) 40%, rgba(0,0,0,0.10) 100%);
+          pointer-events: none;
+        }
+
+        /* Zona de contenido centrada */
+        .content {
+          min-height: calc(100vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        /* Tarjeta “glass” */
+        .card {
+          width: 92%;
+          max-width: 380px;
+          padding: 24px;
+          border-radius: 16px;
+          background: var(--panel);
+          border: 1px solid rgba(255,255,255,0.24);
+          box-shadow: 0 10px 36px rgba(0,0,0,0.30);
+          text-align: center;
+          backdrop-filter: blur(14px);
+          -webkit-backdrop-filter: blur(14px);
+          transition: box-shadow 180ms ease;
+        }
+
+        .card:hover {
+          box-shadow: 0 12px 42px rgba(0,0,0,0.34);
+        }
+
+        .logo {
+          width: clamp(92px, 28vw, 120px);
+          height: auto;
+          margin-bottom: 12px;
+          filter: drop-shadow(0 0 4px #ffffff);
+          user-select: none;
+          pointer-events: none;
+        }
+
+        .title {
+          margin: 0 0 14px 0;
+          color: #222;
+          font-weight: 700;
+          font-size: clamp(18px, 2.6vw, 22px);
+          letter-spacing: 0.2px;
+        }
+
+        .form {
+          text-align: left;
+        }
+
+        .field { margin-bottom: 14px; }
+
+        .label {
+          display: block;
+          font-weight: 600;
+          color: #555;
+          margin-bottom: 6px;
+          font-size: 0.95rem;
+        }
+
+        .input {
+          width: 100%;
+          box-sizing: border-box;
+          height: 48px;
+          padding: 10px 12px;
+          border-radius: 10px;
+          border: 1px solid rgba(0,0,0,0.18);
+          background: rgba(255,255,255,0.85);
+          color: #111;
+          outline: none;
+          transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
+        }
+
+        .input::placeholder { color: rgba(0,0,0,0.45); }
+
+        .input:focus {
+          border-color: rgba(0,0,0,0.35);
+          box-shadow: 0 0 0 3px rgba(255,242,0,0.25);
+          background: rgba(255,255,255,0.95);
+        }
+
+        .btn {
+          width: 100%;
+          height: 48px;
+          padding: 12px;
+          background: var(--gold);
+          color: #000;
+          border: none;
+          border-radius: 10px;
+          font-weight: 800;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          transition: transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease;
+          user-select: none;
+        }
+
+        .btn:hover { transform: translateY(-1px); }
+        .btn:active { transform: translateY(0); }
+        .btn:disabled {
+          opacity: 0.7;
+          cursor: not-allowed;
+          box-shadow: none !important;
+        }
+
+        .msg {
+          margin-top: 12px;
+          font-weight: 700;
+          color: #444;
+          text-align: center;
+        }
+
+        /* Spinner */
+        .modern-spinner {
+          width: 22px;
+          height: 22px;
+          border: 3px solid rgba(0,0,0,0.3);
+          border-top: 3px solid #000;
+          border-radius: 50%;
+          animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
-        }`}
-      </style>
+        }
+
+        /* Ajustes responsivos */
+        @media (min-width: 480px) {
+          .card { padding: 26px; }
+          .field { margin-bottom: 16px; }
+        }
+
+        @media (min-width: 768px) {
+          .card {
+            padding: 28px;
+            border-radius: 18px;
+            max-width: 400px;
+          }
+        }
+      `}</style>
     </div>
   );
 };
