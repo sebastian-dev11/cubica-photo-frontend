@@ -21,12 +21,9 @@ const LoginPage = () => {
 
       setMensaje(res.mensaje);
 
-      // Comparación exacta ignorando mayúsculas/minúsculas
       if (res.mensaje && res.mensaje.toLowerCase() === "acceso concedido") {
         localStorage.setItem('sesionId', usuario);
-        if (res.nombre) {
-          localStorage.setItem('nombreTecnico', res.nombre);
-        }
+        if (res.nombre) localStorage.setItem('nombreTecnico', res.nombre);
         navigate('/dashboard');
       } else {
         console.warn("Credenciales incorrectas o mensaje inesperado.");
@@ -42,12 +39,7 @@ const LoginPage = () => {
   return (
     <div className="login-root">
       {/* Fondo */}
-      <div
-        className="bg"
-        style={{
-          backgroundImage: `url("${BG_URL}")`,
-        }}
-      />
+      <div className="bg" style={{ backgroundImage: `url("${BG_URL}")` }} />
       {/* Overlay de marca */}
       <div className="overlay" />
 
@@ -70,8 +62,8 @@ const LoginPage = () => {
                 onChange={(e) => setUsuario(e.target.value)}
                 required
                 className="input"
-                placeholder="Ej: 1012345678"
-                inputMode="numeric"
+                autoCapitalize="none"
+                autoCorrect="off"
               />
             </div>
 
@@ -83,16 +75,13 @@ const LoginPage = () => {
                 onChange={(e) => setContraseña(e.target.value)}
                 required
                 className="input"
-                placeholder="••••••••"
+                autoCapitalize="none"
+                autoCorrect="off"
               />
             </div>
 
             <button type="submit" className="btn" disabled={cargando}>
-              {cargando ? (
-                <span className="modern-spinner" aria-label="Cargando" />
-              ) : (
-                'Ingresar'
-              )}
+              {cargando ? <span className="modern-spinner" aria-label="Cargando" /> : 'Ingresar'}
             </button>
           </form>
 
@@ -106,10 +95,42 @@ const LoginPage = () => {
           --gold: #fff200;
           --ink: #0a0a0a;
           --text: #333333;
-          --panel: rgba(255,255,255,0.30); /* translucencia base (fallback) */
+          --label: #555555;
+          --panel: rgba(255,255,255,0.30);
+          --panel-border: rgba(255,255,255,0.24);
+          --input-bg: rgba(255,255,255,0.85);
+          --input-text: #111111;
+          --input-border: rgba(0,0,0,0.18);
+          --placeholder: rgba(0,0,0,0.45);
+          --title: #222222;
+          --msg: #444444;
+          --overlay: linear-gradient(to bottom,
+                      rgba(255,242,0,0.35),
+                      rgba(255,242,0,0.05) 40%,
+                      rgba(0,0,0,0.10) 100%);
+          --focus-ring: rgba(255,242,0,0.25);
         }
 
-        /* Contenedor raíz con safe areas (móviles con notch) */
+        @media (prefers-color-scheme: dark) {
+          :root {
+            --text: #e9e9e9;
+            --label: #d3d3d3;
+            --panel: rgba(24,24,24,0.42);
+            --panel-border: rgba(255,255,255,0.18);
+            --input-bg: rgba(255,255,255,0.10);
+            --input-text: #f2f2f2;
+            --input-border: rgba(255,255,255,0.22);
+            --placeholder: rgba(255,255,255,0.55);
+            --title: #fafafa;
+            --msg: #efefef;
+            --overlay: linear-gradient(to bottom,
+                          rgba(255,242,0,0.28),
+                          rgba(0,0,0,0.25) 45%,
+                          rgba(0,0,0,0.45) 100%);
+            --focus-ring: rgba(255,242,0,0.35);
+          }
+        }
+
         .login-root {
           position: relative;
           min-height: 100vh;
@@ -117,11 +138,12 @@ const LoginPage = () => {
           padding: max(12px, env(safe-area-inset-top, 0px)) 12px max(12px, env(safe-area-inset-bottom, 0px));
           box-sizing: border-box;
           font-family: Roboto, system-ui, -apple-system, Segoe UI, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
-          color: #636363ff;
+          color: var(--text);
           overflow: hidden;
+          -webkit-text-size-adjust: 100%; /* evita zoom en iOS */
+          text-size-adjust: 100%;
         }
 
-        /* Fondo imagen */
         .bg {
           position: fixed;
           inset: 0;
@@ -129,21 +151,17 @@ const LoginPage = () => {
           background-position: center;
           background-repeat: no-repeat;
           z-index: -2;
-          /* No usar background-attachment: fixed en mobile (performance/iOS). */
-          transform: translateZ(0); /* hint de performance */
+          transform: translateZ(0);
         }
 
-        /* Overlay: degradado de marca + ligero oscurecido para contraste */
         .overlay {
           position: fixed;
           inset: 0;
           z-index: -1;
-          background:
-            linear-gradient(to bottom, rgba(255,242,0,0.35), rgba(255,242,0,0.05) 40%, rgba(0,0,0,0.10) 100%);
+          background: var(--overlay);
           pointer-events: none;
         }
 
-        /* Zona de contenido centrada */
         .content {
           min-height: calc(100vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
           display: flex;
@@ -151,14 +169,13 @@ const LoginPage = () => {
           justify-content: center;
         }
 
-        /* Tarjeta “glass” */
         .card {
           width: 92%;
           max-width: 380px;
           padding: 24px;
           border-radius: 16px;
           background: var(--panel);
-          border: 1px solid rgba(255,255,255,0.24);
+          border: 1px solid var(--panel-border);
           box-shadow: 0 10px 36px rgba(0,0,0,0.30);
           text-align: center;
           backdrop-filter: blur(14px);
@@ -166,9 +183,7 @@ const LoginPage = () => {
           transition: box-shadow 180ms ease;
         }
 
-        .card:hover {
-          box-shadow: 0 12px 42px rgba(0,0,0,0.34);
-        }
+        .card:hover { box-shadow: 0 12px 42px rgba(0,0,0,0.34); }
 
         .logo {
           width: clamp(92px, 28vw, 120px);
@@ -181,22 +196,19 @@ const LoginPage = () => {
 
         .title {
           margin: 0 0 14px 0;
-          color: #222;
+          color: var(--title);
           font-weight: 700;
           font-size: clamp(18px, 2.6vw, 22px);
           letter-spacing: 0.2px;
         }
 
-        .form {
-          text-align: left;
-        }
-
+        .form { text-align: left; }
         .field { margin-bottom: 14px; }
 
         .label {
           display: block;
           font-weight: 600;
-          color: #555;
+          color: var(--label);
           margin-bottom: 6px;
           font-size: 0.95rem;
         }
@@ -207,19 +219,22 @@ const LoginPage = () => {
           height: 48px;
           padding: 10px 12px;
           border-radius: 10px;
-          border: 1px solid rgba(0,0,0,0.18);
-          background: rgba(255,255,255,0.85);
-          color: #111;
+          border: 1px solid var(--input-border);
+          background: var(--input-bg);
+          color: var(--input-text);
           outline: none;
           transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
+          font-size: 16px; /* evita zoom en iOS */
         }
 
-        .input::placeholder { color: rgba(0,0,0,0.45); }
-
         .input:focus {
-          border-color: rgba(0,0,0,0.35);
-          box-shadow: 0 0 0 3px rgba(255,242,0,0.25);
+          border-color: var(--input-border);
+          box-shadow: 0 0 0 3px var(--focus-ring);
           background: rgba(255,255,255,0.95);
+        }
+
+        @media (prefers-color-scheme: dark) {
+          .input:focus { background: rgba(255,255,255,0.14); }
         }
 
         .btn {
@@ -241,20 +256,15 @@ const LoginPage = () => {
 
         .btn:hover { transform: translateY(-1px); }
         .btn:active { transform: translateY(0); }
-        .btn:disabled {
-          opacity: 0.7;
-          cursor: not-allowed;
-          box-shadow: none !important;
-        }
+        .btn:disabled { opacity: 0.7; cursor: not-allowed; }
 
         .msg {
           margin-top: 12px;
           font-weight: 700;
-          color: #444;
+          color: var(--msg);
           text-align: center;
         }
 
-        /* Spinner */
         .modern-spinner {
           width: 22px;
           height: 22px;
@@ -264,23 +274,15 @@ const LoginPage = () => {
           animation: spin 0.8s linear infinite;
         }
 
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-        /* Ajustes responsivos */
         @media (min-width: 480px) {
           .card { padding: 26px; }
           .field { margin-bottom: 16px; }
         }
 
         @media (min-width: 768px) {
-          .card {
-            padding: 28px;
-            border-radius: 18px;
-            max-width: 400px;
-          }
+          .card { padding: 28px; border-radius: 18px; max-width: 400px; }
         }
       `}</style>
     </div>
