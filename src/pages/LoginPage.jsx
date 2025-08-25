@@ -16,7 +16,7 @@ const LoginPage = () => {
     setCargando(true);
 
     try {
-      const res = await login(usuario, contraseña); // res debe ser { mensaje, nombre }
+      const res = await login(usuario, contraseña); // { mensaje, nombre, userId, isAdmin }
       console.log("Respuesta del backend:", res);
 
       setMensaje(res.mensaje);
@@ -24,6 +24,16 @@ const LoginPage = () => {
       if (res.mensaje && res.mensaje.toLowerCase() === "acceso concedido") {
         localStorage.setItem('sesionId', usuario);
         if (res.nombre) localStorage.setItem('nombreTecnico', res.nombre);
+
+        // === NUEVO: guardar isAdmin y userId para control de permisos en frontend ===
+        if (typeof res.isAdmin !== 'undefined') {
+          localStorage.setItem('isAdmin', res.isAdmin ? '1' : '0');
+        }
+        if (res.userId) {
+          localStorage.setItem('userId', res.userId);
+        }
+        // ==========================================================================
+
         navigate('/dashboard');
       } else {
         console.warn("Credenciales incorrectas o mensaje inesperado.");

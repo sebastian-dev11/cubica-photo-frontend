@@ -33,7 +33,6 @@ const GlassSelect = ({
     const width = Math.min(Math.max(rect?.width || 280, 260), 520);
     const left = Math.min(Math.max((rect?.left || 0), 8), vw - width - 8);
     const topCandidate = (rect?.bottom || 0) + 6;
-    const maxHeight = Math.min(0.6 * vh, vh - topCandidate - 16);
     setPanelPos({ top: Math.min(topCandidate, vh - 120), left, width });
     // Enfocar el panel para navegación con teclado
     setTimeout(() => panelRef.current?.focus(), 0);
@@ -165,6 +164,7 @@ const DashboardPage = () => {
 
   const sesionId = localStorage.getItem('sesionId');
   const nombreTecnico = localStorage.getItem('nombreTecnico') || 'Técnico';
+  const isAdmin = (sesionId || '').toLowerCase() === 'admin';
 
   useEffect(() => {
     if (!sesionId) navigate('/');
@@ -235,12 +235,15 @@ const DashboardPage = () => {
       setMensaje('Por favor completa todos los campos.');
       return;
     }
+
     const formData = new FormData();
     formData.append('imagen', imagen);
     formData.append('tipo', tipo);
     formData.append('sesionId', sesionId);
     formData.append('ubicacion', selectedTienda);
     formData.append('observacion', observacion);
+
+    const tipoEnviado = tipo; // recordar para alternar después
 
     setCargando(true);
     try {
@@ -253,9 +256,12 @@ const DashboardPage = () => {
 
       setImagen(null);
       setObservacion('');
-      setTipo('previa');
       const el = document.getElementById('file-input');
       if (el) el.value = '';
+
+      // Alternar automáticamente (previa ↔ posterior), sin bloquear la elección manual
+      setTipo(tipoEnviado === 'previa' ? 'posterior' : 'previa');
+
       setTimeout(() => setMensaje(''), 3000);
     } catch (error) {
       console.error(error);
@@ -339,7 +345,9 @@ const DashboardPage = () => {
       <div className="topbar">
         <div className="hello">Hola, <strong>{nombreTecnico}</strong></div>
         <div className="actions">
-          <button className="btn-outline" onClick={() => navigate('/informes')}>Ver Informes</button>
+          {isAdmin && (
+            <button className="btn-outline" onClick={() => navigate('/informes')}>Ver Informes</button>
+          )}
           <button className="btn-danger" onClick={handleCerrarSesion}>Cerrar sesión</button>
         </div>
       </div>
@@ -516,7 +524,7 @@ const DashboardPage = () => {
           box-sizing:border-box; font-family: Roboto, system-ui, -apple-system, Segoe UI, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
           color:var(--text);
           -webkit-text-size-adjust:100%; text-size-adjust:100%;
-          overflow-x:hidden; /* dejamos overflow-y visible para portales */
+          overflow-x:hidden;
         }
         .bg{ position:fixed; inset:0; background-size:cover; background-position:center; background-repeat:no-repeat; z-index:-2; transform:translateZ(0); }
         .overlay{ position:fixed; inset:0; z-index:-1; background:var(--overlay); pointer-events:none; }
