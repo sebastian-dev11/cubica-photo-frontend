@@ -473,7 +473,7 @@ const DashboardPage = () => {
 
           {/* Subir Acta: PDF + Imágenes opcionales */}
           <form onSubmit={handleSubirActa} className="card">
-            <h2 className="subtitle">Subir Acta (PDF + imágenes opcionales)</h2>
+            <h2 className="subtitle">Subir Acta (PDF, Foto o Pantallazo del Acta)</h2>
 
             <div className="field">
               <label className="label"><strong>Archivo de Acta (PDF)</strong> — opcional</label>
@@ -488,7 +488,7 @@ const DashboardPage = () => {
             </div>
 
             <div className="field">
-              <label className="label"><strong>Imágenes del Acta</strong> — opcionales (puedes seleccionar varias)</label>
+              <label className="label"><strong>Foto o Pantallazo del Acta</strong> — opcionales (Fotos o Pantallazos)</label>
               <input
                 id="acta-images-input"
                 type="file"
@@ -499,7 +499,7 @@ const DashboardPage = () => {
                   setActaImgs(files);
                 }}
                 className="file"
-                aria-label="Seleccionar una o varias imágenes para el acta"
+                aria-label="Seleccionar una imágen para el acta"
               />
               {actaImgs.length > 0 && (
                 <div className="hint" style={{ marginTop: 6 }}>
@@ -509,7 +509,7 @@ const DashboardPage = () => {
             </div>
 
             <button type="submit" className="btn" disabled={cargandoActa}>
-              {cargandoActa ? 'Subiendo…' : 'Subir Acta e Imágenes'}
+              {cargandoActa ? 'Subiendo…' : 'Subir Acta, Foto o Pantallazo'}
             </button>
 
             {mensajeActa && <p className="msg">{mensajeActa}</p>}
