@@ -1,3 +1,4 @@
+// src/pages/DashboardPage.jsx
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
@@ -28,16 +29,15 @@ const GlassSelect = ({
     setActiveIndex(idx === -1 ? 0 : idx);
 
     // Posicionar el panel justo bajo el trigger (con límites de viewport)
-    const rect = triggerRef.current?.getBoundingClientRect();
+    const rect = triggerRef.current?.getBoundingClientRect?.() || {};
     const vw = window.innerWidth, vh = window.innerHeight;
-    const width = Math.min(Math.max(rect?.width || 280, 260), 520);
-    const left = Math.min(Math.max((rect?.left || 0), 8), vw - width - 8);
-    const topCandidate = (rect?.bottom || 0) + 6;
+    const width = Math.min(Math.max(rect.width || 280, 260), 520);
+    const left = Math.min(Math.max((rect.left || 0), 8), vw - width - 8);
+    const topCandidate = (rect.bottom || 0) + 6;
     setPanelPos({ top: Math.min(topCandidate, vh - 120), left, width });
-    // Enfocar el panel para navegación con teclado
-    setTimeout(() => panelRef.current?.focus(), 0);
 
-    // Cerrar con Escape y al redimensionar
+    setTimeout(() => panelRef.current?.focus?.(), 0);
+
     const onKey = (e) => e.key === 'Escape' && setOpen(false);
     const onResize = () => setOpen(false);
     window.addEventListener('keydown', onKey);
@@ -51,7 +51,7 @@ const GlassSelect = ({
   const handleSelect = (val) => {
     onChange(val);
     setOpen(false);
-    triggerRef.current?.focus();
+    triggerRef.current?.focus?.();
   };
 
   const onKeyDownTrigger = (e) => {
@@ -101,7 +101,7 @@ const GlassSelect = ({
 
       {open && createPortal(
         <div
-          className="dropdown-overlay"          /* Difumina el fondo y se superpone a todo */
+          className="dropdown-overlay"
           onClick={() => setOpen(false)}
           role="presentation"
         >
@@ -147,18 +147,25 @@ const GlassSelect = ({
 ============================= */
 const DashboardPage = () => {
   const navigate = useNavigate();
+
+  // Imagenes de evidencia
   const [imagen, setImagen] = useState(null);
   const [tipo, setTipo] = useState('previa');
   const [observacion, setObservacion] = useState('');
-  const [acta, setActa] = useState(null);
+
+  // Acta: PDF + imágenes opcionales
+  const [acta, setActa] = useState(null);        // PDF opcional
+  const [actaImgs, setActaImgs] = useState([]);  // imágenes opcionales
+
+  // Mensajes y carga
   const [mensaje, setMensaje] = useState('');
   const [mensajeActa, setMensajeActa] = useState('');
   const [cargando, setCargando] = useState(false);
   const [cargandoActa, setCargandoActa] = useState(false);
+
+  // Tiendas / filtros
   const [tiendas, setTiendas] = useState([]);
   const [selectedTienda, setSelectedTienda] = useState('');
-
-  // Filtros (solo Departamento y Ciudad)
   const [filtroDepartamento, setFiltroDepartamento] = useState('');
   const [filtroCiudad, setFiltroCiudad] = useState('');
 
@@ -177,18 +184,15 @@ const DashboardPage = () => {
         setTiendas(Array.isArray(res.data) ? res.data : []);
       } catch (error) {
         console.error('Error al obtener tiendas del backend:', error);
-        setTiendas([]); // evita undefined
+        setTiendas([]);
       }
     };
     fetchTiendas();
   }, []);
 
-  // Opciones únicas (limpia, ignora vacíos)
   const departamentos = useMemo(() => {
     const set = new Set(
-      tiendas
-        .map(t => (t?.departamento ?? '').toString().trim())
-        .filter(Boolean)
+      tiendas.map(t => (t?.departamento ?? '').toString().trim()).filter(Boolean)
     );
     return [...set].sort((a,b)=>a.localeCompare(b,'es',{sensitivity:'base'}));
   }, [tiendas]);
@@ -203,13 +207,14 @@ const DashboardPage = () => {
     return [...set].sort((a,b)=>a.localeCompare(b,'es',{sensitivity:'base'}));
   }, [tiendas, filtroDepartamento]);
 
-  // Tiendas filtradas por depto/ciudad
   const filteredTiendas = useMemo(() => {
-    return tiendas.filter(t => {
-      const okDept = filtroDepartamento ? (t?.departamento ?? '').trim() === filtroDepartamento : true;
-      const okCity = filtroCiudad ? (t?.ciudad ?? '').trim() === filtroCiudad : true;
-      return okDept && okCity;
-    }).sort((a,b)=> (a?.nombre||'').localeCompare((b?.nombre||''),'es',{sensitivity:'base'}));
+    return tiendas
+      .filter(t => {
+        const okDept = filtroDepartamento ? (t?.departamento ?? '').trim() === filtroDepartamento : true;
+        const okCity = filtroCiudad ? (t?.ciudad ?? '').trim() === filtroCiudad : true;
+        return okDept && okCity;
+      })
+      .sort((a,b)=> (a?.nombre||'').localeCompare((b?.nombre||''),'es',{sensitivity:'base'}));
   }, [tiendas, filtroDepartamento, filtroCiudad]);
 
   useEffect(() => {
@@ -229,6 +234,7 @@ const DashboardPage = () => {
     navigate('/');
   };
 
+  /* ===== Subir IMAGEN de evidencia (previa/posterior) ===== */
   const handleSubirImagen = async (e) => {
     e.preventDefault();
     if (!imagen || !tipo || !selectedTienda) {
@@ -243,7 +249,7 @@ const DashboardPage = () => {
     formData.append('ubicacion', selectedTienda);
     formData.append('observacion', observacion);
 
-    const tipoEnviado = tipo; // recordar para alternar después
+    const tipoEnviado = tipo;
 
     setCargando(true);
     try {
@@ -271,16 +277,19 @@ const DashboardPage = () => {
     }
   };
 
+  /* ===== Subir ACTA: PDF + imágenes opcionales ===== */
   const handleSubirActa = async (e) => {
     e.preventDefault();
-    if (!acta) {
-      setMensajeActa('Por favor selecciona un archivo PDF');
+
+    if (!acta && actaImgs.length === 0) {
+      setMensajeActa('Selecciona un PDF y/o una o más imágenes');
       return;
     }
 
     const formData = new FormData();
-    formData.append('acta', acta);
     formData.append('sesionId', sesionId);
+    if (acta) formData.append('acta', acta);
+    actaImgs.forEach(img => formData.append('imagenes', img));
 
     setCargandoActa(true);
     try {
@@ -289,7 +298,17 @@ const DashboardPage = () => {
         body: formData,
       });
       const data = await res.json();
-      setMensajeActa(res.ok ? 'Acta subida correctamente' : (data.mensaje || 'Error al subir el acta'));
+
+      setMensajeActa(data?.mensaje || (res.ok ? 'Archivo(s) subido(s) correctamente' : 'Error al subir'));
+
+      // limpiar inputs y estado
+      setActa(null);
+      setActaImgs([]);
+      const pdfEl = document.getElementById('pdf-input');
+      const imgsEl = document.getElementById('acta-images-input');
+      if (pdfEl) pdfEl.value = '';
+      if (imgsEl) imgsEl.value = '';
+
       setTimeout(() => setMensajeActa(''), 3000);
     } catch (error) {
       console.error(error);
@@ -396,7 +415,7 @@ const DashboardPage = () => {
             </div>
           </div>
 
-          {/* Subir Imagen */}
+          {/* Subir Imagen de evidencia */}
           <form onSubmit={handleSubirImagen} className="card">
             <h2 className="subtitle">Subir Imagen</h2>
 
@@ -417,7 +436,7 @@ const DashboardPage = () => {
               <input
                 id="file-input"
                 type="file"
-                onChange={(e) => setImagen(e.target.files[0])}
+                onChange={(e) => setImagen(e.target.files && e.target.files[0] ? e.target.files[0] : null)}
                 accept="image/*"
                 className="file"
                 required
@@ -452,22 +471,45 @@ const DashboardPage = () => {
             {mensaje && <p className="msg">{mensaje}</p>}
           </form>
 
-          {/* Subir Acta */}
+          {/* Subir Acta: PDF + Imágenes opcionales */}
           <form onSubmit={handleSubirActa} className="card">
-            <h2 className="subtitle">Subir Acta (PDF)</h2>
+            <h2 className="subtitle">Subir Acta (PDF + imágenes opcionales)</h2>
 
             <div className="field">
+              <label className="label"><strong>Archivo de Acta (PDF)</strong> — opcional</label>
               <input
+                id="pdf-input"
                 type="file"
                 accept="application/pdf"
-                onChange={(e) => setActa(e.target.files[0])}
+                onChange={(e) => setActa(e.target.files && e.target.files[0] ? e.target.files[0] : null)}
                 className="file"
-                aria-label="Seleccionar archivo PDF"
+                aria-label="Seleccionar archivo PDF del acta"
               />
             </div>
 
+            <div className="field">
+              <label className="label"><strong>Imágenes del Acta</strong> — opcionales (puedes seleccionar varias)</label>
+              <input
+                id="acta-images-input"
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={(e) => {
+                  const files = Array.from(e.target.files || []);
+                  setActaImgs(files);
+                }}
+                className="file"
+                aria-label="Seleccionar una o varias imágenes para el acta"
+              />
+              {actaImgs.length > 0 && (
+                <div className="hint" style={{ marginTop: 6 }}>
+                  {actaImgs.length} imagen{actaImgs.length === 1 ? '' : 'es'} seleccionada{actaImgs.length === 1 ? '' : 's'}
+                </div>
+              )}
+            </div>
+
             <button type="submit" className="btn" disabled={cargandoActa}>
-              {cargandoActa ? 'Subiendo…' : 'Subir Acta'}
+              {cargandoActa ? 'Subiendo…' : 'Subir Acta e Imágenes'}
             </button>
 
             {mensajeActa && <p className="msg">{mensajeActa}</p>}
@@ -625,10 +667,9 @@ const DashboardPage = () => {
         .select-trigger .selected.placeholder{ opacity: .75; }
         .select-trigger .chev{ flex-shrink:0; opacity:.75; }
 
-        /* Overlay a nivel de body para que siempre se superponga */
         .dropdown-overlay{
           position: fixed; inset: 0;
-          z-index: 2147483647;               /* por encima de todo */
+          z-index: 2147483647;
           background: rgba(0,0,0,0.12);
           backdrop-filter: blur(2.5px) saturate(120%);
           -webkit-backdrop-filter: blur(2.5px) saturate(120%);
