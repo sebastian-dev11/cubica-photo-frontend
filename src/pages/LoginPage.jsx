@@ -1,56 +1,118 @@
+// LoginPage.jsx
 import React, { useState } from 'react';
 import { login } from '../services/authService';
 import { useNavigate } from 'react-router-dom';
 
 const BG_URL = "https://blog.generaclatam.com/hubfs/shutterstock_93376264.jpg";
 
+/* Umbrales y tiempos */
+const SLOW_MS = 1800;        // mostrar mensaje de reactivacion si tarda mas que esto
+const ATTEMPT_TIMEOUT_MS = 12000; // tiempo maximo por intento
+const MAX_WAIT_MS = 60000;   // espera total antes de dar error
+const RETRY_DELAY_MS = 3000; // pausa entre intentos
+
 const LoginPage = () => {
+  /* Estados de formulario */
   const [usuario, setUsuario] = useState('');
   const [contraseña, setContraseña] = useState('');
+
+  /* Estados de UI */
   const [mensaje, setMensaje] = useState('');
   const [cargando, setCargando] = useState(false);
+  const [latenciaMs, setLatenciaMs] = useState(0);
+
   const navigate = useNavigate();
+
+  /* Helper timeout simple */
+  const withTimeout = (promise, ms) =>
+    Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        const t = setTimeout(() => {
+          clearTimeout(t);
+          reject(new Error('timeout'));
+        }, ms);
+      }),
+    ]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
     setCargando(true);
+    setMensaje('Conectando con el servidor...');
+    setLatenciaMs(0);
+
+    let slowTimer = null;
+    const tStart = performance.now();
 
     try {
-      const res = await login(usuario, contraseña); // { mensaje, nombre, userId, isAdmin }
-      console.log("Respuesta del backend:", res);
+      /* Preparar mensaje de reactivacion si se demora el primer tramo */
+      slowTimer = setTimeout(() => {
+        setMensaje('Estamos reactivando los servicios, por favor espera');
+      }, SLOW_MS);
 
-      setMensaje(res.mensaje);
+      /* Reintentos hasta MAX_WAIT_MS */
+      let intento = 0;
+      let ex;
+      while (performance.now() - tStart < MAX_WAIT_MS) {
+        intento += 1;
+        try {
+          const res = await withTimeout(login(usuario, contraseña), ATTEMPT_TIMEOUT_MS);
 
-      if (res.mensaje && res.mensaje.toLowerCase() === "acceso concedido") {
-        localStorage.setItem('sesionId', usuario);
-        if (res.nombre) localStorage.setItem('nombreTecnico', res.nombre);
+          const dtTotal = Math.round(performance.now() - tStart);
+          setLatenciaMs(dtTotal);
 
-        // === NUEVO: guardar isAdmin y userId para control de permisos en frontend ===
-        if (typeof res.isAdmin !== 'undefined') {
-          localStorage.setItem('isAdmin', res.isAdmin ? '1' : '0');
+          if (dtTotal > SLOW_MS) {
+            setMensaje('Servicios listos, iniciando...');
+          } else {
+            setMensaje(res.mensaje || 'Acceso concedido');
+          }
+
+          if (res.mensaje && res.mensaje.toLowerCase() === 'acceso concedido') {
+            localStorage.setItem('sesionId', usuario);
+            if (res.nombre) localStorage.setItem('nombreTecnico', res.nombre);
+            if (typeof res.isAdmin !== 'undefined') {
+              localStorage.setItem('isAdmin', res.isAdmin ? '1' : '0');
+            }
+            if (res.userId) {
+              localStorage.setItem('userId', res.userId);
+            }
+            navigate('/dashboard');
+          } else {
+            setMensaje(res.mensaje || 'Credenciales incorrectas');
+          }
+
+          return; // exito, salir
+        } catch (err) {
+          ex = err;
+          /* Mientras haya presupuesto de tiempo, seguir esperando y reintentando */
+          setMensaje('Estamos reactivando los servicios, por favor espera');
+          const tiempoRestante = MAX_WAIT_MS - (performance.now() - tStart);
+          if (tiempoRestante <= RETRY_DELAY_MS) break;
+          await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
         }
-        if (res.userId) {
-          localStorage.setItem('userId', res.userId);
-        }
-        // ==========================================================================
+      }
 
-        navigate('/dashboard');
+      /* Si sale del bucle, excedio MAX_WAIT_MS */
+      if (ex && ex.message === 'timeout') {
+        setMensaje('No se pudo conectar. El servidor podria seguir reactivandose. Intenta nuevamente.');
       } else {
-        console.warn("Credenciales incorrectas o mensaje inesperado.");
+        setMensaje('No se pudo conectar. Intenta nuevamente.');
       }
     } catch (error) {
-      console.error("Error en login:", error);
-      setMensaje("Error en el servidor o conexión");
+      setMensaje('Error en el servidor o conexion');
+      console.error('Error en login:', error);
+    } finally {
+      if (slowTimer) clearTimeout(slowTimer);
+      setCargando(false);
     }
-
-    setCargando(false);
   };
 
   return (
     <div className="login-root">
       {/* Fondo */}
       <div className="bg" style={{ backgroundImage: `url("${BG_URL}")` }} />
-      {/* Overlay de marca */}
+      {/* Overlay */}
       <div className="overlay" />
 
       {/* Contenido */}
@@ -90,12 +152,18 @@ const LoginPage = () => {
               />
             </div>
 
+            {/* Mensaje dinamico */}
+            {mensaje && (
+              <p className="msg">
+                {mensaje}
+                {latenciaMs > SLOW_MS ? ` (≈ ${Math.round(latenciaMs / 100) / 10}s)` : null}
+              </p>
+            )}
+
             <button type="submit" className="btn" disabled={cargando}>
               {cargando ? <span className="modern-spinner" aria-label="Cargando" /> : 'Ingresar'}
             </button>
           </form>
-
-          {mensaje && <p className="msg">{mensaje}</p>}
         </div>
       </div>
 
@@ -150,7 +218,7 @@ const LoginPage = () => {
           font-family: Roboto, system-ui, -apple-system, Segoe UI, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
           color: var(--text);
           overflow: hidden;
-          -webkit-text-size-adjust: 100%; /* evita zoom en iOS */
+          -webkit-text-size-adjust: 100%;
           text-size-adjust: 100%;
         }
 
@@ -234,7 +302,7 @@ const LoginPage = () => {
           color: var(--input-text);
           outline: none;
           transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
-          font-size: 16px; /* evita zoom en iOS */
+          font-size: 16px;
         }
 
         .input:focus {
@@ -269,10 +337,11 @@ const LoginPage = () => {
         .btn:disabled { opacity: 0.7; cursor: not-allowed; }
 
         .msg {
-          margin-top: 12px;
+          margin: 10px 0 12px 0;
           font-weight: 700;
           color: var(--msg);
           text-align: center;
+          min-height: 1.2em;
         }
 
         .modern-spinner {

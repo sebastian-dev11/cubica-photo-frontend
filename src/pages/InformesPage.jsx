@@ -6,9 +6,7 @@ import { createPortal } from 'react-dom';
 const API_BASE = 'https://cubica-photo-app.onrender.com';
 const BG_URL = "https://blog.generaclatam.com/hubfs/shutterstock_93376264.jpg";
 
-/* =============================
-   Modal de confirmación (glass)
-============================= */
+/*Modal de confirmación (glass)*/
 const ConfirmModal = ({
   open,
   title = 'Confirmar',
