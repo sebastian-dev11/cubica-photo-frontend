@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 
 const API_BASE = 'https://cubica-photo-app.onrender.com';
-const BG_URL = "https://blog.generaclatam.com/hubfs/shutterstock_93376264.jpg";
+const BG_URL = "https://png.pngtree.com/thumb_back/fh260/background/20231226/pngtree-radiant-golden-gradients-glistening-metal-texture-for-banners-and-backgrounds-image_13915236.png";
 
 /*Modal de confirmación (glass)*/
 const ConfirmModal = ({

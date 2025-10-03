@@ -1,9 +1,8 @@
-// LoginPage.jsx
 import React, { useState } from 'react';
 import { login } from '../services/authService';
 import { useNavigate } from 'react-router-dom';
 
-const BG_URL = "https://blog.generaclatam.com/hubfs/shutterstock_93376264.jpg";
+const BG_URL = "https://png.pngtree.com/thumb_back/fh260/background/20231226/pngtree-radiant-golden-gradients-glistening-metal-texture-for-banners-and-backgrounds-image_13915236.png";
 
 /* Umbrales y tiempos */
 const SLOW_MS = 1800;        // mostrar mensaje de reactivacion si tarda mas que esto
