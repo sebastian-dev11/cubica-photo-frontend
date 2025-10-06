@@ -382,8 +382,8 @@ const clearImgs = (e, opts = {}) => {
     }
   };
 
-  // Generar PDF
-const handleGenerarPDF = () => {
+  // Generar PDF, obtener URL de Cloudinary y compartir por WhatsApp
+const handleGenerarPDF = async () => {
   if (!selectedTienda) {
     window.alert('Selecciona una tienda antes de generar el PDF.');
     return;
@@ -393,27 +393,45 @@ const handleGenerarPDF = () => {
     return;
   }
 
-  const pdfUrl = `https://cubica-photo-app.onrender.com/pdf/generar/${sesionId}?tiendaId=${selectedTienda}`;
-  window.open(pdfUrl, '_blank');
+  // Abrir pestaña temprano para evitar bloqueo del popup
+  const win = window.open('', '_blank');
 
-  const tiendaLabel = (tiendaOptions.find(o => o.value === selectedTienda)?.label || '').trim();
-  const texto = `Informe técnico${tiendaLabel ? ` - ${tiendaLabel}` : ''}\n${pdfUrl}`;
-  const waUrl = `https://wa.me/?text=${encodeURIComponent(texto)}`;
+  try {
+    const jsonUrl = `https://cubica-photo-app.onrender.com/pdf/generar/${sesionId}?tiendaId=${selectedTienda}&format=json`;
+    const res = await fetch(jsonUrl, { headers: { Accept: 'application/json' } });
+    if (!res.ok) throw new Error('No se pudo obtener el enlace del informe');
+    const data = await res.json();
+    const cloudUrl = data?.url;
+    if (!cloudUrl) throw new Error('Respuesta sin URL de informe');
 
-  const compartir = window.confirm('Informe generado. ¿Quieres compartir el enlace por WhatsApp ahora?');
-  if (compartir) window.open(waUrl, '_blank');
+    // Mostrar el PDF en la pestaña abierta
+    if (win) win.location.href = cloudUrl; else window.open(cloudUrl, '_blank');
 
-  // Reinicia el flujo
-  resetFlow();
-  setSelectedTienda('');
-  limpiarFiltros();
+    // Preparar link de WhatsApp con el URL correcto
+    const tiendaLabel = (tiendaOptions.find(o => o.value === selectedTienda)?.label || '').trim();
+    const texto = `Informe técnico${tiendaLabel ? ` - ${tiendaLabel}` : ''}\n${cloudUrl}`;
+    const waUrl = `https://wa.me/?text=${encodeURIComponent(texto)}`;
 
-  // Cierra sesión y redirige
-  setTimeout(() => {
-    localStorage.removeItem('sesionId');
-    localStorage.removeItem('nombreTecnico');
-    navigate('/');
-  }, 1200);
+    const compartir = window.confirm('Informe generado. ¿Quieres compartir el enlace por WhatsApp ahora?');
+    if (compartir) window.open(waUrl, '_blank');
+
+  } catch (err) {
+    // Cerrar pestaña temporal si hubo error
+    try { if (win) win.close(); } catch (_) {}
+    console.error(err);
+    window.alert('Error al generar/obtener el enlace del informe. Intenta de nuevo.');
+    return;
+  } finally {
+    // Reiniciar flujo y cerrar sesión
+    resetFlow();
+    setSelectedTienda('');
+    limpiarFiltros();
+    setTimeout(() => {
+      localStorage.removeItem('sesionId');
+      localStorage.removeItem('nombreTecnico');
+      navigate('/');
+    }, 1200);
+  }
 };
 
   // Opciones
