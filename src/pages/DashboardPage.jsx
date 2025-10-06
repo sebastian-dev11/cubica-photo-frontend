@@ -108,31 +108,48 @@ const GlassSelect = ({ value, onChange, options, placeholder = 'Selecciona…', 
 };
 
 /* =============================
+   Helpers simples
+============================= */
+// Normaliza texto para búsqueda
+const norm = (s) => String(s || '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase();
+
+/* =============================
    DashboardPage
 ============================= */
 const DashboardPage = () => {
   const navigate = useNavigate();
+
+  // Paso actual del flujo (1 Ubicación, 2 Evidencias, 3 Acta, 4 PDF)
+  const [step, setStep] = useState(() => {
+    const v = Number(localStorage.getItem('dashStep') || 1);
+    return Number.isFinite(v) && v >= 1 && v <= 4 ? v : 1;
+  });
 
   // Evidencias
   const [imagen, setImagen] = useState(null);
   const [tipo, setTipo] = useState('previa');
   const [observacion, setObservacion] = useState('');
 
+  // Contadores de evidencias subidas
+  const [cntPrevias, setCntPrevias] = useState(0);
+  const [cntPosteriores, setCntPosteriores] = useState(0);
+
   // Acta
   const [acta, setActa] = useState(null);
   const [actaImgs, setActaImgs] = useState([]);
+  const [actaOK, setActaOK] = useState(false);
 
   // Previews
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState(null);
   const [imgPreviewUrl, setImgPreviewUrl] = useState(null);
-
-  // NEW: preview para imagen de evidencia
   const [evidPreviewUrl, setEvidPreviewUrl] = useState(null);
 
   // Refs inputs ocultos
   const pdfRef = useRef(null);
   const imgsRef = useRef(null);
-  // NEW: ref para input de evidencia
   const evidenciaRef = useRef(null);
 
   // UI
@@ -146,6 +163,7 @@ const DashboardPage = () => {
   const [selectedTienda, setSelectedTienda] = useState('');
   const [filtroDepartamento, setFiltroDepartamento] = useState('');
   const [filtroCiudad, setFiltroCiudad] = useState('');
+  const [searchText, setSearchText] = useState(''); // búsqueda libre
 
   const sesionId = localStorage.getItem('sesionId');
   const nombreTecnico = localStorage.getItem('nombreTecnico') || 'Técnico';
@@ -153,6 +171,10 @@ const DashboardPage = () => {
 
   useEffect(() => { if (!sesionId) navigate('/'); }, [navigate, sesionId]);
 
+  // Persistir paso
+  useEffect(() => { localStorage.setItem('dashStep', String(step)); }, [step]);
+
+  // Tiendas desde backend
   useEffect(() => {
     const fetchTiendas = async () => {
       try {
@@ -166,7 +188,7 @@ const DashboardPage = () => {
     fetchTiendas();
   }, []);
 
-  // Derivados
+  // Derivados de filtros base
   const departamentos = useMemo(() => {
     const set = new Set(tiendas.map(t => (t?.departamento ?? '').toString().trim()).filter(Boolean));
     return [...set].sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
@@ -178,25 +200,28 @@ const DashboardPage = () => {
     return [...set].sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
   }, [tiendas, filtroDepartamento]);
 
+  // Filtrado final con búsqueda libre
   const filteredTiendas = useMemo(() => {
+    const q = norm(searchText);
     return tiendas
       .filter(t => {
         const okDept = filtroDepartamento ? (t?.departamento ?? '').trim() === filtroDepartamento : true;
         const okCity = filtroCiudad ? (t?.ciudad ?? '').trim() === filtroCiudad : true;
-        return okDept && okCity;
+        if (!(okDept && okCity)) return false;
+        if (!q) return true;
+        const hay = [t?.nombre, t?.ciudad, t?.departamento].map(norm).some(s => s.includes(q));
+        return hay;
       })
       .sort((a, b) => (a?.nombre || '').localeCompare((b?.nombre || ''), 'es', { sensitivity: 'base' }));
-  }, [tiendas, filtroDepartamento, filtroCiudad]);
+  }, [tiendas, filtroDepartamento, filtroCiudad, searchText]);
 
+  // Asegurar tienda seleccionada válida
   useEffect(() => {
     if (selectedTienda && !filteredTiendas.some(t => t._id === selectedTienda)) setSelectedTienda('');
   }, [filteredTiendas, selectedTienda]);
 
   // Previews: PDF
-  useEffect(() => {
-    return () => { if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl); };
-  }, [pdfPreviewUrl]);
-
+  useEffect(() => () => { if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl); }, [pdfPreviewUrl]);
   useEffect(() => {
     if (!acta) {
       if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl);
@@ -209,10 +234,7 @@ const DashboardPage = () => {
   }, [acta]);
 
   // Previews: primera imagen seleccionada (acta)
-  useEffect(() => {
-    return () => { if (imgPreviewUrl) URL.revokeObjectURL(imgPreviewUrl); };
-  }, [imgPreviewUrl]);
-
+  useEffect(() => () => { if (imgPreviewUrl) URL.revokeObjectURL(imgPreviewUrl); }, [imgPreviewUrl]);
   useEffect(() => {
     if (!actaImgs || actaImgs.length === 0) {
       if (imgPreviewUrl) URL.revokeObjectURL(imgPreviewUrl);
@@ -230,11 +252,8 @@ const DashboardPage = () => {
     }
   }, [actaImgs]);
 
-  // NEW: Preview imagen de evidencia
-  useEffect(() => {
-    return () => { if (evidPreviewUrl) URL.revokeObjectURL(evidPreviewUrl); };
-  }, [evidPreviewUrl]);
-
+  // Preview imagen evidencia
+  useEffect(() => () => { if (evidPreviewUrl) URL.revokeObjectURL(evidPreviewUrl); }, [evidPreviewUrl]);
   useEffect(() => {
     if (!imagen) {
       if (evidPreviewUrl) URL.revokeObjectURL(evidPreviewUrl);
@@ -252,16 +271,22 @@ const DashboardPage = () => {
   }, [imagen]);
 
   // Acciones comunes
-  const limpiarFiltros = () => { setFiltroDepartamento(''); setFiltroCiudad(''); };
+  const limpiarFiltros = () => {
+    setFiltroDepartamento('');
+    setFiltroCiudad('');
+    setSearchText('');
+  };
+
   const handleCerrarSesion = () => {
     localStorage.removeItem('sesionId');
     localStorage.removeItem('nombreTecnico');
     navigate('/');
   };
 
-  /* ===== Evidencia ===== */
+  // Evidencia: abrir selector
   const pickEvid = () => evidenciaRef.current && evidenciaRef.current.click();
 
+  // Evidencia: limpiar
   const clearEvid = (e) => {
     e?.stopPropagation?.();
     setImagen(null);
@@ -269,6 +294,7 @@ const DashboardPage = () => {
     if (evidPreviewUrl) { URL.revokeObjectURL(evidPreviewUrl); setEvidPreviewUrl(null); }
   };
 
+  // Subir evidencia
   const handleSubirImagen = async (e) => {
     e.preventDefault();
     if (!imagen || !tipo || !selectedTienda) { setMensaje('Por favor completa todos los campos.'); return; }
@@ -285,7 +311,12 @@ const DashboardPage = () => {
     try {
       const res = await fetch('https://cubica-photo-app.onrender.com/imagenes/subir', { method: 'POST', body: formData });
       const data = await res.json();
-      setMensaje(data.mensaje || 'Imagen y observación enviadas correctamente');
+      if (res.ok) {
+        // Incrementa contadores
+        if (tipoEnviado === 'previa') setCntPrevias(x => x + 1);
+        else setCntPosteriores(x => x + 1);
+      }
+      setMensaje(data.mensaje || (res.ok ? 'Imagen y observación enviadas correctamente' : 'Error al subir la imagen'));
       setImagen(null); setObservacion('');
       if (evidenciaRef.current) evidenciaRef.current.value = '';
       setTipo(tipoEnviado === 'previa' ? 'posterior' : 'previa');
@@ -298,21 +329,31 @@ const DashboardPage = () => {
     }
   };
 
-  /* ===== Limpiar selección acta ===== */
-  const clearPdf = (e) => {
-    e?.stopPropagation?.();
-    setActa(null);
-    if (pdfRef.current) pdfRef.current.value = '';
-    if (pdfPreviewUrl) { URL.revokeObjectURL(pdfPreviewUrl); setPdfPreviewUrl(null); }
-  };
-  const clearImgs = (e) => {
-    e?.stopPropagation?.();
-    setActaImgs([]);
-    if (imgsRef.current) imgsRef.current.value = '';
-    if (imgPreviewUrl) { URL.revokeObjectURL(imgPreviewUrl); setImgPreviewUrl(null); }
-  };
+  // Limpiar selección de PDF
+const clearPdf = (e, opts = {}) => {
+  e?.stopPropagation?.();
+  const keepStatus = !!opts.keepStatus; // no tocar actaOK si es true
 
-  /* ===== Acta: PDF + Imágenes ===== */
+  setActa(null);
+  if (!keepStatus) setActaOK(false);
+
+  if (pdfRef.current) pdfRef.current.value = '';
+  if (pdfPreviewUrl) { URL.revokeObjectURL(pdfPreviewUrl); setPdfPreviewUrl(null); }
+};
+
+  // Limpiar imágenes del acta
+const clearImgs = (e, opts = {}) => {
+  e?.stopPropagation?.();
+  const keepStatus = !!opts.keepStatus; // no tocar actaOK si es true
+
+  setActaImgs([]);
+  if (!keepStatus) setActaOK(false);
+
+  if (imgsRef.current) imgsRef.current.value = '';
+  if (imgPreviewUrl) { URL.revokeObjectURL(imgPreviewUrl); setImgPreviewUrl(null); }
+};
+
+  // Subir acta
   const handleSubirActa = async (e) => {
     e.preventDefault();
     if (!acta && actaImgs.length === 0) { setMensajeActa('Selecciona un PDF o una imagen del acta'); return; }
@@ -327,8 +368,11 @@ const DashboardPage = () => {
       const res = await fetch('https://cubica-photo-app.onrender.com/acta/subir', { method: 'POST', body: formData });
       const data = await res.json();
       setMensajeActa(data?.mensaje || (res.ok ? 'Archivo(s) subido(s) correctamente' : 'Error al subir'));
-      clearPdf();
-      clearImgs();
+      if (res.ok) {
+  clearPdf(null, { keepStatus: true });
+  clearImgs(null, { keepStatus: true });
+  setActaOK(true);
+}
       setTimeout(() => setMensajeActa(''), 3000);
     } catch (error) {
       console.error(error);
@@ -338,16 +382,39 @@ const DashboardPage = () => {
     }
   };
 
-  const handleGenerarPDF = () => {
-    if (!selectedTienda) { setMensaje('Por favor selecciona una tienda para generar el PDF.'); return; }
-    const url = `https://cubica-photo-app.onrender.com/pdf/generar/${sesionId}?tiendaId=${selectedTienda}`;
-    window.open(url, '_blank');
-    setTimeout(() => {
-      localStorage.removeItem('sesionId');
-      localStorage.removeItem('nombreTecnico');
-      navigate('/');
-    }, 1200);
-  };
+  // Generar PDF
+const handleGenerarPDF = () => {
+  if (!selectedTienda) {
+    window.alert('Selecciona una tienda antes de generar el PDF.');
+    return;
+  }
+  if (cntPrevias < 1 || cntPosteriores < 1) {
+    window.alert('Debes subir al menos 1 imagen PREVIA y 1 POSTERIOR para generar el informe.');
+    return;
+  }
+
+  const pdfUrl = `https://cubica-photo-app.onrender.com/pdf/generar/${sesionId}?tiendaId=${selectedTienda}`;
+  window.open(pdfUrl, '_blank');
+
+  const tiendaLabel = (tiendaOptions.find(o => o.value === selectedTienda)?.label || '').trim();
+  const texto = `Informe técnico${tiendaLabel ? ` - ${tiendaLabel}` : ''}\n${pdfUrl}`;
+  const waUrl = `https://wa.me/?text=${encodeURIComponent(texto)}`;
+
+  const compartir = window.confirm('Informe generado. ¿Quieres compartir el enlace por WhatsApp ahora?');
+  if (compartir) window.open(waUrl, '_blank');
+
+  // Reinicia el flujo
+  resetFlow();
+  setSelectedTienda('');
+  limpiarFiltros();
+
+  // Cierra sesión y redirige
+  setTimeout(() => {
+    localStorage.removeItem('sesionId');
+    localStorage.removeItem('nombreTecnico');
+    navigate('/');
+  }, 1200);
+};
 
   // Opciones
   const deptOptions = useMemo(() => [{ value: '', label: 'Todos' }, ...departamentos.map(d => ({ value: d, label: d }))], [departamentos]);
@@ -358,6 +425,32 @@ const DashboardPage = () => {
   // Triggers inputs (acta)
   const pickPdf = () => pdfRef.current && pdfRef.current.click();
   const pickImgs = () => imgsRef.current && imgsRef.current.click();
+
+  // Cambiar tienda en paso 1
+  const onSelectTienda = (val) => {
+    // Si cambia en paso 1, limpia progreso de archivos
+    if (step > 1) return;
+    setSelectedTienda(val);
+    setCntPrevias(0);
+    setCntPosteriores(0);
+    setActaOK(false);
+  };
+
+  // Reglas de avance
+  const canNextFrom1 = !!selectedTienda;
+  const hasAnyEvidence = (cntPrevias + cntPosteriores) > 0;
+  const canNextFrom2 = hasAnyEvidence;
+  const canNextFrom3 = actaOK;
+
+  // Controles de paso
+  const goNext = () => setStep(s => Math.min(4, s + 1));
+  const goBack = () => setStep(s => Math.max(1, s - 1));
+  const resetFlow = () => {
+    setStep(1);
+    setCntPrevias(0);
+    setCntPosteriores(0);
+    setActaOK(false);
+  };
 
   return (
     <div className="dash-root">
@@ -376,218 +469,289 @@ const DashboardPage = () => {
         <div className="stack">
           <h1 className="title">Dashboard</h1>
 
-          {/* Ubicación — Filtros */}
-          <div className="card">
-            <h2 className="subtitle">Ubicación — Filtros</h2>
-
-            <div className="filters-grid">
-              <div className="field">
-                <label className="label">Departamento</label>
-                <GlassSelect
-                  value={filtroDepartamento}
-                  onChange={(val) => { setFiltroDepartamento(val); setFiltroCiudad(''); }}
-                  options={deptOptions}
-                  placeholder="Todos"
-                  ariaLabel="Filtrar por departamento"
-                />
-              </div>
-              <div className="field">
-                <label className="label">Ciudad</label>
-                <GlassSelect
-                  value={filtroCiudad}
-                  onChange={(val) => setFiltroCiudad(val)}
-                  options={cityOptions}
-                  placeholder="Todas"
-                  ariaLabel="Filtrar por ciudad"
-                  disabled={cityOptions.length <= 1}
-                />
-              </div>
+          {/* Indicador de pasos */}
+          <div className="stepper card">
+            <div className="steps">
+              <div className={`step ${step >= 1 ? 'done' : ''} ${step === 1 ? 'current' : ''}`}><span>1</span> Ubicación</div>
+              <div className={`step ${step >= 2 ? 'done' : ''} ${step === 2 ? 'current' : ''}`}><span>2</span> Evidencias</div>
+              <div className={`step ${step >= 3 ? 'done' : ''} ${step === 3 ? 'current' : ''}`}><span>3</span> Acta</div>
+              <div className={`step ${step >= 4 ? 'done' : ''} ${step === 4 ? 'current' : ''}`}><span>4</span> PDF</div>
             </div>
-
-            <div className="field">
-              <label className="label"><strong>Ubicación del D1</strong></label>
-              <GlassSelect
-                value={selectedTienda}
-                onChange={setSelectedTienda}
-                options={tiendaOptions}
-                placeholder={`Selecciona una tienda (${filteredTiendas.length})`}
-                ariaLabel="Seleccionar tienda"
-                disabled={tiendaOptions.length === 0}
-              />
-            </div>
-
-            <div className="filters-actions">
-              <div className="hint">{filteredTiendas.length} resultado{filteredTiendas.length === 1 ? '' : 's'}</div>
-              <button type="button" className="btn-outline" onClick={limpiarFiltros}>Limpiar filtros</button>
+            <div className="step-quick">
+              <div>Evidencias: {cntPrevias} previas · {cntPosteriores} posteriores</div>
+              <div>Acta: {actaOK ? 'Lista' : 'Pendiente'}</div>
+              <button type="button" className="btn-outline" onClick={resetFlow}>Reiniciar flujo</button>
             </div>
           </div>
 
-          {/* Subir imagen de evidencia — con botón glass y preview */}
-          <form onSubmit={handleSubirImagen} className="card">
-            <h2 className="subtitle">Subir Imagen</h2>
+          {/* Paso 1: Ubicación */}
+          {step === 1 && (
+            <div className="card">
+              <h2 className="subtitle">Ubicación — Filtros</h2>
 
-            {/* SOLO cambio aquí: añadimos upload-toggles--center */}
-            <div className="upload-toggles upload-toggles--center">
-              <button type="button" className="upload-btn" onClick={pickEvid} aria-label="Seleccionar imagen de evidencia">
-                <span className="thumb-wrap">
-                  {evidPreviewUrl ? (
-                    <span className="thumb-box-lg" aria-label="Imagen de evidencia seleccionada">
-                      <img src={evidPreviewUrl} alt="Previsualización evidencia" className="thumb-img-lg" />
-                      <span
-                        className="clear-x"
-                        role="button"
-                        tabIndex={0}
-                        onClick={(e) => clearEvid(e)}
-                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); clearEvid(e); } }}
-                        aria-label="Quitar imagen"
-                      >×</span>
-                    </span>
-                  ) : (
-                    <span className="icon-slab" aria-hidden="true">
-                      <svg className="upload-icon" viewBox="0 0 48 48">
-                        <path d="M24 30V12" stroke="currentColor" strokeWidth="3" strokeLinecap="round" fill="none"/>
-                        <path d="M17 18l7-8 7 8" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-                        <rect x="12" y="32" width="24" height="6" rx="3" fill="currentColor" opacity=".95"/>
-                      </svg>
-                    </span>
-                  )}
-                </span>
-                <span className="upload-label">Subir imagen de evidencia</span>
-              </button>
-            </div>
-
-            {/* Input oculto */}
-            <input
-              ref={evidenciaRef}
-              id="evidencia-input"
-              type="file"
-              accept="image/*"
-              style={{ display: 'none' }}
-              required
-              onChange={(e) => setImagen(e.target.files && e.target.files[0] ? e.target.files[0] : null)}
-            />
-
-            {imagen && (
-              <div className="hint" style={{ marginTop: 10 }}>
-                Imagen: {imagen.name}
+              {/* Buscador libre */}
+              <div className="field">
+                <label className="label">Buscar tienda</label>
+                <input
+                  className="input"
+                  type="text"
+                  placeholder="Nombre, ciudad o departamento"
+                  value={searchText}
+                  onChange={(e) => setSearchText(e.target.value)}
+                />
               </div>
-            )}
 
-            <div className="field" style={{ marginTop: 10 }}>
-              <label className="label"><strong>Tipo de imagen</strong></label>
-              <GlassSelect
-                value={tipo}
-                onChange={(v) => setTipo(v)}
-                options={tipoOptions}
-                placeholder="Selecciona tipo"
-                ariaLabel="Seleccionar tipo de imagen"
+              <div className="filters-grid">
+                <div className="field">
+                  <label className="label">Departamento</label>
+                  <GlassSelect
+                    value={filtroDepartamento}
+                    onChange={(val) => { setFiltroDepartamento(val); setFiltroCiudad(''); }}
+                    options={deptOptions}
+                    placeholder="Todos"
+                    ariaLabel="Filtrar por departamento"
+                  />
+                </div>
+                <div className="field">
+                  <label className="label">Ciudad</label>
+                  <GlassSelect
+                    value={filtroCiudad}
+                    onChange={(val) => setFiltroCiudad(val)}
+                    options={cityOptions}
+                    placeholder="Todas"
+                    ariaLabel="Filtrar por ciudad"
+                    disabled={cityOptions.length <= 1}
+                  />
+                </div>
+              </div>
+
+              <div className="field">
+                <label className="label"><strong>Ubicación del D1</strong></label>
+                <GlassSelect
+                  value={selectedTienda}
+                  onChange={onSelectTienda}
+                  options={tiendaOptions}
+                  placeholder={`Selecciona una tienda (${filteredTiendas.length})`}
+                  ariaLabel="Seleccionar tienda"
+                  disabled={tiendaOptions.length === 0}
+                />
+              </div>
+
+              <div className="filters-actions">
+                <div className="hint">{filteredTiendas.length} resultado{filteredTiendas.length === 1 ? '' : 's'}</div>
+                <button type="button" className="btn-outline" onClick={limpiarFiltros}>Limpiar filtros</button>
+              </div>
+
+              <div className="wizard-actions">
+                <button className="btn" onClick={() => canNextFrom1 && goNext()} disabled={!canNextFrom1}>Continuar</button>
+              </div>
+            </div>
+          )}
+
+          {/* Paso 2: Evidencias */}
+          {step === 2 && (
+            <form onSubmit={handleSubirImagen} className="card">
+              <h2 className="subtitle">Subir Imagen</h2>
+
+              <div className="info-row">
+                <div>Tienda seleccionada: <strong>{tiendaOptions.find(o => o.value === selectedTienda)?.label || 'Sin tienda'}</strong></div>
+                <div>Evidencias: {cntPrevias} previas · {cntPosteriores} posteriores</div>
+              </div>
+
+              {/* Botón centrado según ajuste previo */}
+              <div className="upload-toggles upload-toggles--center">
+                <button type="button" className="upload-btn" onClick={pickEvid} aria-label="Seleccionar imagen de evidencia">
+                  <span className="thumb-wrap">
+                    {evidPreviewUrl ? (
+                      <span className="thumb-box-lg" aria-label="Imagen de evidencia seleccionada">
+                        <img src={evidPreviewUrl} alt="Previsualización evidencia" className="thumb-img-lg" />
+                        <span
+                          className="clear-x"
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => clearEvid(e)}
+                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); clearEvid(e); } }}
+                          aria-label="Quitar imagen"
+                        >×</span>
+                      </span>
+                    ) : (
+                      <span className="icon-slab" aria-hidden="true">
+                        <svg className="upload-icon" viewBox="0 0 48 48">
+                          <path d="M24 30V12" stroke="currentColor" strokeWidth="3" strokeLinecap="round" fill="none"/>
+                          <path d="M17 18l7-8 7 8" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+                          <rect x="12" y="32" width="24" height="6" rx="3" fill="currentColor" opacity=".95"/>
+                        </svg>
+                      </span>
+                    )}
+                  </span>
+                  <span className="upload-label">Subir imagen de evidencia</span>
+                </button>
+              </div>
+
+              {/* Input oculto */}
+              <input
+                ref={evidenciaRef}
+                id="evidencia-input"
+                type="file"
+                accept="image/*"
+                style={{ display: 'none' }}
+                required
+                onChange={(e) => setImagen(e.target.files && e.target.files[0] ? e.target.files[0] : null)}
               />
-            </div>
 
-            <div className="field">
-              <label className="label"><strong>Observación (opcional)</strong></label>
-              <textarea value={observacion} onChange={(e) => setObservacion(e.target.value)} rows={3} className="textarea" />
-            </div>
+              {imagen && (
+                <div className="hint" style={{ marginTop: 10 }}>
+                  Imagen: {imagen.name}
+                </div>
+              )}
 
-            <button type="submit" className="btn" disabled={cargando}>{cargando ? 'Subiendo…' : 'Subir Imagen'}</button>
-            {mensaje && <p className="msg">{mensaje}</p>}
-          </form>
-
-          {/* Subir acta */}
-          <form onSubmit={handleSubirActa} className="card">
-            <h2 className="subtitle">Subir Acta</h2>
-
-            <div className="upload-toggles">
-              {/* PDF */}
-              <button type="button" className="upload-btn" onClick={pickPdf} aria-label="Subir acta formato PDF">
-                <span className="thumb-wrap">
-                  {acta ? (
-                    <span className="thumb-box-lg pdf" aria-label="PDF seleccionado">
-                      <span className="pdf-badge">PDF</span>
-                      <span
-                        className="clear-x"
-                        role="button"
-                        tabIndex={0}
-                        onClick={(e) => clearPdf(e)}
-                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); clearPdf(e); } }}
-                        aria-label="Quitar PDF"
-                      >×</span>
-                    </span>
-                  ) : (
-                    <span className="icon-slab" aria-hidden="true">
-                      <svg className="upload-icon" viewBox="0 0 48 48">
-                        <path d="M24 30V12" stroke="currentColor" strokeWidth="3" strokeLinecap="round" fill="none"/>
-                        <path d="M17 18l7-8 7 8" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-                        <rect x="12" y="32" width="24" height="6" rx="3" fill="currentColor" opacity=".95"/>
-                      </svg>
-                    </span>
-                  )}
-                </span>
-                <span className="upload-label">Subir acta formato PDF</span>
-              </button>
-
-              {/* IMAGEN */}
-              <button type="button" className="upload-btn" onClick={pickImgs} aria-label="Subir acta formato imagen">
-                <span className="thumb-wrap">
-                  {imgPreviewUrl ? (
-                    <span className="thumb-box-lg" aria-label="Imagen de acta seleccionada">
-                      <img src={imgPreviewUrl} alt="Previsualización acta" className="thumb-img-lg" />
-                      {actaImgs.length > 1 && <span className="thumb-count-lg">+{actaImgs.length - 1}</span>}
-                      <span
-                        className="clear-x"
-                        role="button"
-                        tabIndex={0}
-                        onClick={(e) => clearImgs(e)}
-                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); clearImgs(e); } }}
-                        aria-label="Quitar imágenes"
-                      >×</span>
-                    </span>
-                  ) : (
-                    <span className="icon-slab" aria-hidden="true">
-                      <svg className="upload-icon" viewBox="0 0 48 48">
-                        <path d="M24 30V12" stroke="currentColor" strokeWidth="3" strokeLinecap="round" fill="none"/>
-                        <path d="M17 18l7-8 7 8" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-                        <rect x="12" y="32" width="24" height="6" rx="3" fill="currentColor" opacity=".95"/>
-                      </svg>
-                    </span>
-                  )}
-                </span>
-                <span className="upload-label">Subir acta formato imagen</span>
-              </button>
-            </div>
-
-            {/* Inputs ocultos */}
-            <input
-              ref={pdfRef}
-              id="pdf-input"
-              type="file"
-              accept="application/pdf"
-              style={{ display: 'none' }}
-              onChange={(e) => setActa(e.target.files && e.target.files[0] ? e.target.files[0] : null)}
-            />
-            <input
-              ref={imgsRef}
-              id="acta-images-input"
-              type="file"
-              accept="image/*"
-              multiple
-              style={{ display: 'none' }}
-              onChange={(e) => setActaImgs(Array.from(e.target.files || []))}
-            />
-
-            {(acta || actaImgs.length > 0) && (
-              <div className="hint" style={{ marginTop: 10 }}>
-                {acta ? `PDF: ${acta.name}` : ''}
-                {acta && actaImgs.length > 0 ? ' • ' : ''}
-                {actaImgs.length > 0 ? `${actaImgs.length} imagen${actaImgs.length === 1 ? '' : 'es'}` : ''}
+              <div className="field" style={{ marginTop: 10 }}>
+                <label className="label"><strong>Tipo de imagen</strong></label>
+                <GlassSelect
+                  value={tipo}
+                  onChange={(v) => setTipo(v)}
+                  options={tipoOptions}
+                  placeholder="Selecciona tipo"
+                  ariaLabel="Seleccionar tipo de imagen"
+                />
               </div>
-            )}
 
-            <button type="submit" className="btn" disabled={cargandoActa}>{cargandoActa ? 'Subiendo…' : 'Subir Acta'}</button>
-            {mensajeActa && <p className="msg">{mensajeActa}</p>}
-          </form>
+              <div className="field">
+                <label className="label"><strong>Observación (opcional)</strong></label>
+                <textarea value={observacion} onChange={(e) => setObservacion(e.target.value)} rows={3} className="textarea" />
+              </div>
 
-          <button onClick={handleGenerarPDF} className="btn-primary">Generar PDF</button>
+              <button type="submit" className="btn" disabled={cargando}>{cargando ? 'Subiendo…' : 'Subir Imagen'}</button>
+              {mensaje && <p className="msg">{mensaje}</p>}
+
+              <div className="wizard-actions">
+                <button type="button" className="btn-outline" onClick={goBack}>Regresar</button>
+                <button type="button" className="btn" onClick={() => canNextFrom2 && goNext()} disabled={!canNextFrom2}>Continuar</button>
+              </div>
+            </form>
+          )}
+
+          {/* Paso 3: Acta */}
+          {step === 3 && (
+            <form onSubmit={handleSubirActa} className="card">
+              <h2 className="subtitle">Subir Acta</h2>
+
+              <div className="info-row">
+                <div>Evidencias cargadas: {cntPrevias} previas · {cntPosteriores} posteriores</div>
+                <div>Estado acta: {actaOK ? 'Lista' : 'Pendiente'}</div>
+              </div>
+
+              <div className="upload-toggles">
+                {/* PDF */}
+                <button type="button" className="upload-btn" onClick={pickPdf} aria-label="Subir acta formato PDF">
+                  <span className="thumb-wrap">
+                    {acta ? (
+                      <span className="thumb-box-lg pdf" aria-label="PDF seleccionado">
+                        <span className="pdf-badge">PDF</span>
+                        <span
+                          className="clear-x"
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => clearPdf(e)}
+                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); clearPdf(e); } }}
+                          aria-label="Quitar PDF"
+                        >×</span>
+                      </span>
+                    ) : (
+                      <span className="icon-slab" aria-hidden="true">
+                        <svg className="upload-icon" viewBox="0 0 48 48">
+                          <path d="M24 30V12" stroke="currentColor" strokeWidth="3" strokeLinecap="round" fill="none"/>
+                          <path d="M17 18l7-8 7 8" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+                          <rect x="12" y="32" width="24" height="6" rx="3" fill="currentColor" opacity=".95"/>
+                        </svg>
+                      </span>
+                    )}
+                  </span>
+                  <span className="upload-label">Subir acta formato PDF</span>
+                </button>
+
+                {/* IMAGEN */}
+                <button type="button" className="upload-btn" onClick={pickImgs} aria-label="Subir acta formato imagen">
+                  <span className="thumb-wrap">
+                    {imgPreviewUrl ? (
+                      <span className="thumb-box-lg" aria-label="Imagen de acta seleccionada">
+                        <img src={imgPreviewUrl} alt="Previsualización acta" className="thumb-img-lg" />
+                        {actaImgs.length > 1 && <span className="thumb-count-lg">+{actaImgs.length - 1}</span>}
+                        <span
+                          className="clear-x"
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => clearImgs(e)}
+                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); clearImgs(e); } }}
+                          aria-label="Quitar imágenes"
+                        >×</span>
+                      </span>
+                    ) : (
+                      <span className="icon-slab" aria-hidden="true">
+                        <svg className="upload-icon" viewBox="0 0 48 48">
+                          <path d="M24 30V12" stroke="currentColor" strokeWidth="3" strokeLinecap="round" fill="none"/>
+                          <path d="M17 18l7-8 7 8" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+                          <rect x="12" y="32" width="24" height="6" rx="3" fill="currentColor" opacity=".95"/>
+                        </svg>
+                      </span>
+                    )}
+                  </span>
+                  <span className="upload-label">Subir acta formato imagen</span>
+                </button>
+              </div>
+
+              {/* Inputs ocultos */}
+              <input
+                ref={pdfRef}
+                id="pdf-input"
+                type="file"
+                accept="application/pdf"
+                style={{ display: 'none' }}
+                onChange={(e) => setActa(e.target.files && e.target.files[0] ? e.target.files[0] : null)}
+              />
+              <input
+                ref={imgsRef}
+                id="acta-images-input"
+                type="file"
+                accept="image/*"
+                multiple
+                style={{ display: 'none' }}
+                onChange={(e) => setActaImgs(Array.from(e.target.files || []))}
+              />
+
+              {(acta || actaImgs.length > 0) && (
+                <div className="hint" style={{ marginTop: 10 }}>
+                  {acta ? `PDF: ${acta.name}` : ''}
+                  {acta && actaImgs.length > 0 ? ' • ' : ''}
+                  {actaImgs.length > 0 ? `${actaImgs.length} imagen${actaImgs.length === 1 ? '' : 'es'}` : ''}
+                </div>
+              )}
+
+              <button type="submit" className="btn" disabled={cargandoActa}>{cargandoActa ? 'Subiendo…' : 'Subir Acta'}</button>
+              {mensajeActa && <p className="msg">{mensajeActa}</p>}
+
+              <div className="wizard-actions">
+                <button type="button" className="btn-outline" onClick={goBack}>Regresar</button>
+                <button type="button" className="btn" onClick={() => canNextFrom3 && goNext()} disabled={!canNextFrom3}>Continuar</button>
+              </div>
+            </form>
+          )}
+
+          {/* Paso 4: Generar PDF */}
+          {step === 4 && (
+            <>
+              <div className="card">
+                <h2 className="subtitle">Resumen</h2>
+                <div className="hint">Ubicación: <strong>{tiendaOptions.find(o => o.value === selectedTienda)?.label || 'Sin tienda'}</strong></div>
+                <div className="hint">Evidencias: {cntPrevias} previas · {cntPosteriores} posteriores</div>
+                <div className="hint">Acta: {actaOK ? 'Lista' : 'Pendiente'}</div>
+                <div className="wizard-actions">
+                  <button type="button" className="btn-outline" onClick={goBack}>Regresar</button>
+                </div>
+              </div>
+              <button onClick={handleGenerarPDF} className="btn-primary" disabled={cntPrevias < 1 || cntPosteriores < 1}>Generar y compartir </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -677,17 +841,17 @@ const DashboardPage = () => {
 
         .msg{ margin-top:10px; font-weight:700; color:var(--msg); text-align:center; }
 
-        /* === Upload (glass) — reutilizado para evidencia y acta === */
+        /* Upload */
         .upload-toggles{ display:grid; grid-template-columns:1fr; gap:10px; margin-bottom:8px; }
         @media (min-width:520px){ .upload-toggles{ grid-template-columns:1fr 1fr; } }
 
-        /* >>> NUEVO: centrar solo el botón de la sección de evidencia <<< */
+        /* Centrado del botón de evidencia */
         .upload-toggles--center{
-          grid-template-columns: 1fr;   /* fuerza 1 columna siempre, también en >=520px */
-          justify-items: center;        /* centra el hijo */
+          grid-template-columns: 1fr;
+          justify-items: center;
         }
         @media (min-width:520px){
-          .upload-toggles--center{ grid-template-columns: 1fr; } /* evita que pase a 2 columnas */
+          .upload-toggles--center{ grid-template-columns: 1fr; }
         }
         .upload-toggles--center .upload-btn{
           width:100%;
@@ -719,7 +883,6 @@ const DashboardPage = () => {
         }
 
         .thumb-wrap{ position:relative; display:inline-grid; place-items:center; }
-
         .icon-slab{
           width:84px; height:64px; border-radius:12px; display:grid; place-items:center;
           background: linear-gradient(180deg, rgba(255,255,255,0.32), rgba(255,255,255,0.10));
@@ -797,6 +960,32 @@ const DashboardPage = () => {
 
         @keyframes fadeIn{ from{opacity:0} to{opacity:1} }
         @keyframes pop{ from{opacity:0; transform:translateY(6px) scale(0.98)} to{opacity:1; transform:translateY(0) scale(1)} }
+
+        /* Stepper simple */
+        .stepper .steps{
+          display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:8px;
+        }
+        .stepper .step{
+          display:flex; align-items:center; gap:8px; padding:8px; border-radius:10px; border:1px solid var(--panel-border); background:var(--panel);
+          font-weight:700;
+        }
+        .stepper .step span{
+          width:22px; height:22px; display:inline-grid; place-items:center; border-radius:999px; background:rgba(0,0,0,0.15);
+        }
+        .stepper .step.current{ outline:2px solid rgba(0,0,0,0.18); }
+        .stepper .step.done span{ background:#9ae6b4; }
+        .step-quick{
+          display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-top:6px;
+        }
+
+        .wizard-actions{
+          display:flex; gap:10px; justify-content:space-between; align-items:center; margin-top:12px;
+        }
+
+        .info-row{
+          display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px; color:var(--label);
+          font-size:.95rem;
+        }
       `}</style>
     </div>
   );
