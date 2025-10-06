@@ -110,7 +110,6 @@ const GlassSelect = ({ value, onChange, options, placeholder = 'Selecciona…', 
 /* =============================
    Helpers simples
 ============================= */
-// Normaliza texto para búsqueda
 const norm = (s) => String(s || '')
   .normalize('NFD')
   .replace(/[\u0300-\u036f]/g, '')
@@ -133,7 +132,7 @@ const DashboardPage = () => {
   const [tipo, setTipo] = useState('previa');
   const [observacion, setObservacion] = useState('');
 
-  // Contadores de evidencias subidas
+  // Contadores
   const [cntPrevias, setCntPrevias] = useState(0);
   const [cntPosteriores, setCntPosteriores] = useState(0);
 
@@ -147,7 +146,7 @@ const DashboardPage = () => {
   const [imgPreviewUrl, setImgPreviewUrl] = useState(null);
   const [evidPreviewUrl, setEvidPreviewUrl] = useState(null);
 
-  // Refs inputs ocultos
+  // Refs inputs
   const pdfRef = useRef(null);
   const imgsRef = useRef(null);
   const evidenciaRef = useRef(null);
@@ -158,7 +157,7 @@ const DashboardPage = () => {
   const [cargando, setCargando] = useState(false);
   const [cargandoActa, setCargandoActa] = useState(false);
 
-  // Estados de generación/preview
+  // Generación / preview
   const [genLoading, setGenLoading] = useState(false);
   const [genUrl, setGenUrl] = useState('');
   const [genErr, setGenErr] = useState('');
@@ -168,7 +167,7 @@ const DashboardPage = () => {
   const [selectedTienda, setSelectedTienda] = useState('');
   const [filtroDepartamento, setFiltroDepartamento] = useState('');
   const [filtroCiudad, setFiltroCiudad] = useState('');
-  const [searchText, setSearchText] = useState(''); // búsqueda libre
+  const [searchText, setSearchText] = useState('');
 
   const sesionId = localStorage.getItem('sesionId');
   const nombreTecnico = localStorage.getItem('nombreTecnico') || 'Técnico';
@@ -179,7 +178,7 @@ const DashboardPage = () => {
   // Persistir paso
   useEffect(() => { localStorage.setItem('dashStep', String(step)); }, [step]);
 
-  // Tiendas desde backend
+  // Tiendas
   useEffect(() => {
     const fetchTiendas = async () => {
       try {
@@ -193,7 +192,7 @@ const DashboardPage = () => {
     fetchTiendas();
   }, []);
 
-  // Derivados de filtros base
+  // Derivados
   const departamentos = useMemo(() => {
     const set = new Set(tiendas.map(t => (t?.departamento ?? '').toString().trim()).filter(Boolean));
     return [...set].sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
@@ -205,7 +204,6 @@ const DashboardPage = () => {
     return [...set].sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
   }, [tiendas, filtroDepartamento]);
 
-  // Filtrado final con búsqueda libre
   const filteredTiendas = useMemo(() => {
     const q = norm(searchText);
     return tiendas
@@ -220,12 +218,12 @@ const DashboardPage = () => {
       .sort((a, b) => (a?.nombre || '').localeCompare((b?.nombre || ''), 'es', { sensitivity: 'base' }));
   }, [tiendas, filtroDepartamento, filtroCiudad, searchText]);
 
-  // Asegurar tienda seleccionada válida
+  // Asegurar tienda válida
   useEffect(() => {
     if (selectedTienda && !filteredTiendas.some(t => t._id === selectedTienda)) setSelectedTienda('');
   }, [filteredTiendas, selectedTienda]);
 
-  // Previews: PDF
+  // Previews
   useEffect(() => () => { if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl); }, [pdfPreviewUrl]);
   useEffect(() => {
     if (!acta) {
@@ -238,7 +236,6 @@ const DashboardPage = () => {
     setPdfPreviewUrl(url);
   }, [acta]);
 
-  // Previews: primera imagen seleccionada (acta)
   useEffect(() => () => { if (imgPreviewUrl) URL.revokeObjectURL(imgPreviewUrl); }, [imgPreviewUrl]);
   useEffect(() => {
     if (!actaImgs || actaImgs.length === 0) {
@@ -257,7 +254,6 @@ const DashboardPage = () => {
     }
   }, [actaImgs]);
 
-  // Preview imagen evidencia
   useEffect(() => () => { if (evidPreviewUrl) URL.revokeObjectURL(evidPreviewUrl); }, [evidPreviewUrl]);
   useEffect(() => {
     if (!imagen) {
@@ -288,10 +284,8 @@ const DashboardPage = () => {
     navigate('/');
   };
 
-  // Evidencia: abrir selector
   const pickEvid = () => evidenciaRef.current && evidenciaRef.current.click();
 
-  // Evidencia: limpiar
   const clearEvid = (e) => {
     e?.stopPropagation?.();
     setImagen(null);
@@ -299,7 +293,6 @@ const DashboardPage = () => {
     if (evidPreviewUrl) { URL.revokeObjectURL(evidPreviewUrl); setEvidPreviewUrl(null); }
   };
 
-  // Subir evidencia
   const handleSubirImagen = async (e) => {
     e.preventDefault();
     if (!imagen || !tipo || !selectedTienda) { setMensaje('Por favor completa todos los campos.'); return; }
@@ -317,7 +310,6 @@ const DashboardPage = () => {
       const res = await fetch('https://cubica-photo-app.onrender.com/imagenes/subir', { method: 'POST', body: formData });
       const data = await res.json();
       if (res.ok) {
-        // Incrementa contadores
         if (tipoEnviado === 'previa') setCntPrevias(x => x + 1);
         else setCntPosteriores(x => x + 1);
       }
@@ -334,10 +326,9 @@ const DashboardPage = () => {
     }
   };
 
-  // Limpiar selección de PDF
   const clearPdf = (e, opts = {}) => {
     e?.stopPropagation?.();
-    const keepStatus = !!opts.keepStatus; // no tocar actaOK si es true
+    const keepStatus = !!opts.keepStatus;
 
     setActa(null);
     if (!keepStatus) setActaOK(false);
@@ -346,10 +337,9 @@ const DashboardPage = () => {
     if (pdfPreviewUrl) { URL.revokeObjectURL(pdfPreviewUrl); setPdfPreviewUrl(null); }
   };
 
-  // Limpiar imágenes del acta
   const clearImgs = (e, opts = {}) => {
     e?.stopPropagation?.();
-    const keepStatus = !!opts.keepStatus; // no tocar actaOK si es true
+    const keepStatus = !!opts.keepStatus;
 
     setActaImgs([]);
     if (!keepStatus) setActaOK(false);
@@ -358,7 +348,6 @@ const DashboardPage = () => {
     if (imgPreviewUrl) { URL.revokeObjectURL(imgPreviewUrl); setImgPreviewUrl(null); }
   };
 
-  // Subir acta
   const handleSubirActa = async (e) => {
     e.preventDefault();
     if (!acta && actaImgs.length === 0) { setMensajeActa('Selecciona un PDF o una imagen del acta'); return; }
@@ -387,7 +376,6 @@ const DashboardPage = () => {
     }
   };
 
-  // Generar PDF (sin abrir pestañas), obtener URL de Cloudinary y mostrar preview
   const handleGenerarPDF = async () => {
     if (!selectedTienda) {
       window.alert('Selecciona una tienda antes de generar el PDF.');
@@ -418,14 +406,36 @@ const DashboardPage = () => {
     }
   };
 
-  // Compartir por WhatsApp usando la URL final de Cloudinary
-  const handleShareWhatsApp = () => {
-    if (!genUrl) return;
-    const tiendaLabel = (tiendaOptions.find(o => o.value === selectedTienda)?.label || '').trim();
-    const texto = `Informe técnico${tiendaLabel ? ` - ${tiendaLabel}` : ''}\n${genUrl}`;
-    const waUrl = `https://wa.me/?text=${encodeURIComponent(texto)}`;
-    window.open(waUrl, '_blank');
-  };
+  // Compartir por WhatsApp y luego cerrar sesión automáticamente
+const handleShareWhatsApp = () => {
+  if (!genUrl) return;
+
+  const tiendaLabel = (tiendaOptions.find(o => o.value === selectedTienda)?.label || '').trim();
+  const texto = `Informe técnico${tiendaLabel ? ` - ${tiendaLabel}` : ''}\n${genUrl}`;
+  const waUrl = `https://wa.me/?text=${encodeURIComponent(texto)}`;
+
+  // 1) Intentar abrir en nueva pestaña/ventana (mejor en escritorio)
+  const popup = window.open(waUrl, '_blank', 'noopener,noreferrer');
+
+  if (popup && !popup.closed) {
+    // Evita acceso del popup a la ventana original
+    popup.opener = null;
+    // 2) Pequeño delay para no interferir con el popup y cerrar sesión
+    setTimeout(() => {
+      handleCerrarSesion(); // limpia storage y navega a '/'
+    }, 400);
+  } else {
+    // 3) Fallback para iOS Safari / bloqueadores: abrir en la misma pestaña
+    window.location.href = waUrl;
+    // No podremos navegar a '/', pero limpiamos la sesión por si el usuario vuelve con "Atrás"
+    setTimeout(() => {
+      try {
+        localStorage.removeItem('sesionId');
+        localStorage.removeItem('nombreTecnico');
+      } catch {}
+    }, 200);
+  }
+};
 
   // Opciones
   const deptOptions = useMemo(() => [{ value: '', label: 'Todos' }, ...departamentos.map(d => ({ value: d, label: d }))], [departamentos]);
@@ -433,13 +443,10 @@ const DashboardPage = () => {
   const tiendaOptions = useMemo(() => filteredTiendas.map(t => ({ value: t._id, label: `${t.nombre} — ${t.departamento}, ${t.ciudad}` })), [filteredTiendas]);
   const tipoOptions = [{ value: 'previa', label: 'Previa' }, { value: 'posterior', label: 'Posterior' }];
 
-  // Triggers inputs (acta)
   const pickPdf = () => pdfRef.current && pdfRef.current.click();
   const pickImgs = () => imgsRef.current && imgsRef.current.click();
 
-  // Cambiar tienda en paso 1
   const onSelectTienda = (val) => {
-    // Si cambia en paso 1, limpia progreso de archivos
     if (step > 1) return;
     setSelectedTienda(val);
     setCntPrevias(0);
@@ -447,13 +454,11 @@ const DashboardPage = () => {
     setActaOK(false);
   };
 
-  // Reglas de avance
   const canNextFrom1 = !!selectedTienda;
   const hasAnyEvidence = (cntPrevias + cntPosteriores) > 0;
   const canNextFrom2 = hasAnyEvidence;
   const canNextFrom3 = actaOK;
 
-  // Controles de paso
   const goNext = () => setStep(s => Math.min(4, s + 1));
   const goBack = () => setStep(s => Math.max(1, s - 1));
   const resetFlow = () => {
@@ -503,18 +508,7 @@ const DashboardPage = () => {
             <div className="card">
               <h2 className="subtitle">Ubicación — Filtros</h2>
 
-              {/* Buscador libre */}
-              <div className="field">
-                <label className="label">Buscar tienda</label>
-                <input
-                  className="input"
-                  type="text"
-                  placeholder="Nombre, ciudad o departamento"
-                  value={searchText}
-                  onChange={(e) => setSearchText(e.target.value)}
-                />
-              </div>
-
+              {/* Filtros primero */}
               <div className="filters-grid">
                 <div className="field">
                   <label className="label">Departamento</label>
@@ -537,6 +531,21 @@ const DashboardPage = () => {
                     disabled={cityOptions.length <= 1}
                   />
                 </div>
+              </div>
+
+              {/* Buscador inmediatamente antes del selector de Ubicación */}
+              <div className="field">
+                <label className="label">Buscar tienda</label>
+                <input
+                  className="input"
+                  type="search"
+                  inputMode="search"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  placeholder="Nombre, ciudad o departamento"
+                  value={searchText}
+                  onChange={(e) => setSearchText(e.target.value)}
+                />
               </div>
 
               <div className="field">
@@ -568,11 +577,10 @@ const DashboardPage = () => {
               <h2 className="subtitle">Subir Imagen</h2>
 
               <div className="info-row">
-                <div>Tienda seleccionada: <strong>{tiendaOptions.find(o => o.value === selectedTienda)?.label || 'Sin tienda'}</strong></div>
+                <div>Tienda: <strong>{tiendaOptions.find(o => o.value === selectedTienda)?.label || 'Sin tienda'}</strong></div>
                 <div>Evidencias: {cntPrevias} previas · {cntPosteriores} posteriores</div>
               </div>
 
-              {/* Botón centrado según ajuste previo */}
               <div className="upload-toggles upload-toggles--center">
                 <button type="button" className="upload-btn" onClick={pickEvid} aria-label="Seleccionar imagen de evidencia">
                   <span className="thumb-wrap">
@@ -602,7 +610,6 @@ const DashboardPage = () => {
                 </button>
               </div>
 
-              {/* Input oculto */}
               <input
                 ref={evidenciaRef}
                 id="evidencia-input"
@@ -651,8 +658,8 @@ const DashboardPage = () => {
               <h2 className="subtitle">Subir Acta</h2>
 
               <div className="info-row">
-                <div>Evidencias cargadas: {cntPrevias} previas · {cntPosteriores} posteriores</div>
-                <div>Estado acta: {actaOK ? 'Lista' : 'Pendiente'}</div>
+                <div>Evidencias: {cntPrevias} previas · {cntPosteriores} posteriores</div>
+                <div>Acta: {actaOK ? 'Lista' : 'Pendiente'}</div>
               </div>
 
               <div className="upload-toggles">
@@ -714,7 +721,6 @@ const DashboardPage = () => {
                 </button>
               </div>
 
-              {/* Inputs ocultos */}
               <input
                 ref={pdfRef}
                 id="pdf-input"
@@ -754,7 +760,6 @@ const DashboardPage = () => {
           {/* Paso 4: Generar / Carga / Preview / Compartir */}
           {step === 4 && (
             <>
-              {/* Estado inicial (resumen + botón generar) */}
               {!genLoading && !genUrl && !genErr && (
                 <>
                   <div className="card">
@@ -772,7 +777,6 @@ const DashboardPage = () => {
                 </>
               )}
 
-              {/* Cargando */}
               {genLoading && (
                 <div className="card">
                   <h2 className="subtitle">Generando informe</h2>
@@ -783,7 +787,6 @@ const DashboardPage = () => {
                 </div>
               )}
 
-              {/* Error */}
               {!genLoading && genErr && (
                 <div className="card">
                   <h2 className="subtitle">Error</h2>
@@ -795,7 +798,6 @@ const DashboardPage = () => {
                 </div>
               )}
 
-              {/* Preview + compartir */}
               {!genLoading && genUrl && (
                 <>
                   <div className="card">
@@ -841,30 +843,37 @@ const DashboardPage = () => {
           }
         }
 
-        .dash-root{ position:relative; min-height:100vh; width:100%;
-          padding:max(12px, env(safe-area-inset-top,0px)) 12px max(12px, env(safe-area-inset-bottom,0px));
+        /* Mobile-first base */
+        .dash-root{
+          position:relative; min-height:100dvh; width:100%;
+          padding:max(10px, env(safe-area-inset-top,0px)) 10px max(10px, env(safe-area-inset-bottom,0px));
           box-sizing:border-box; font-family: Roboto, system-ui, -apple-system, Segoe UI, Helvetica, Arial;
           color:var(--text); -webkit-text-size-adjust:100%; text-size-adjust:100%; overflow-x:hidden;
+          -webkit-tap-highlight-color: transparent;
         }
         .bg{ position:fixed; inset:0; background-size:cover; background-position:center; background-repeat:no-repeat; z-index:-2; transform:translateZ(0); }
         .overlay{ position:fixed; inset:0; z-index:-1; background:var(--overlay); pointer-events:none; }
 
-        .topbar{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin:6px auto 10px;
+        .topbar{
+          position:sticky; top:max(8px, env(safe-area-inset-top,0px));
+          display:flex; align-items:center; justify-content:space-between; gap:8px; margin:6px auto 10px;
           width:min(100%,960px); padding:10px 12px; border-radius:14px; background:var(--panel); border:1px solid var(--panel-border);
           backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); box-shadow:0 8px 24px rgba(0,0,0,0.18);
         }
         .hello{ font-weight:600; }
         .actions{ display:flex; gap:8px; flex-wrap:wrap; }
 
-        .content{ min-height:calc(100vh - 90px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px));
+        .content{ min-height:calc(100dvh - 90px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px));
           display:flex; align-items:flex-start; justify-content:center; }
         .stack{ width:min(100%,960px); display:flex; flex-direction:column; align-items:center; gap:16px; padding:8px 0 28px; }
 
-        .title{ margin:10px 0 0 0; color:var(--title); font-weight:800; font-size:clamp(20px,3.6vw,28px); letter-spacing:.2px; text-align:center; }
-        .subtitle{ margin:0 0 10px 0; font-size:clamp(16px,2.8vw,20px); color:var(--title); font-weight:700; text-align:left; }
+        .title{ margin:6px 0 0 0; color:var(--title); font-weight:800; font-size:clamp(18px,4.5vw,28px); letter-spacing:.2px; text-align:center; }
+        .subtitle{ margin:0 0 10px 0; font-size:clamp(16px,4vw,20px); color:var(--title); font-weight:700; text-align:left; }
 
-        .card{ width:92%; max-width:520px; padding:18px; border-radius:16px; background:var(--panel); border:1px solid var(--panel-border);
-          box-shadow:0 10px 36px rgba(0,0,0,0.30); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); transition:box-shadow 180ms ease; }
+        .card{
+          width:100%; max-width:560px; padding:16px; border-radius:16px; background:var(--panel); border:1px solid var(--panel-border);
+          box-shadow:0 10px 36px rgba(0,0,0,0.30); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); transition:box-shadow 180ms ease;
+        }
         .card:hover{ box-shadow:0 12px 42px rgba(0,0,0,0.34); }
 
         .filters-grid{ display:grid; grid-template-columns:1fr; gap:10px; }
@@ -876,34 +885,43 @@ const DashboardPage = () => {
         .label{ display:block; font-weight:600; color:var(--label); margin-bottom:6px; }
 
         .input, .textarea, .file{
-          width:100%; box-sizing:border-box; border-radius:10px; border:1px solid var(--input-border);
+          width:100%; box-sizing:border-box; border-radius:12px; border:1px solid var(--input-border);
           background:var(--input-bg); color:var(--input-text); outline:none; font-size:16px;
           transition:border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
         }
+        .input{ height:48px; padding:10px 12px; }
         .textarea{ padding:10px 12px; resize:vertical; min-height:84px; }
         .file{ padding:8px 10px; }
 
-        .btn{ width:100%; height:48px; padding:12px; background:var(--gold); color:#000; border:none; border-radius:10px;
+        .btn{
+          width:100%; height:52px; padding:12px; background:var(--gold); color:#000; border:none; border-radius:12px;
           font-weight:800; cursor:pointer; display:inline-flex; align-items:center; justify-content:center;
-          transition:transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease; user-select:none; }
+          transition:transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease; user-select:none;
+        }
         .btn:hover{ transform:translateY(-1px); }
         .btn:active{ transform:translateY(0); }
         .btn:disabled{ opacity:.7; cursor:not-allowed; }
 
-        .btn-primary{ width:92%; max-width:520px; height:48px; padding:12px; background:var(--gold); color:#000; border:none; border-radius:10px;
+        .btn-primary{
+          width:100%; max-width:560px; height:52px; padding:12px; background:var(--gold); color:#000; border:none; border-radius:12px;
           font-weight:800; cursor:pointer; display:inline-flex; align-items:center; justify-content:center;
-          transition:transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease; user-select:none; box-shadow:0 8px 24px rgba(0,0,0,0.18); }
+          transition:transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease; user-select:none; box-shadow:0 8px 24px rgba(0,0,0,0.18);
+        }
         .btn-primary:hover{ transform:translateY(-1px); }
         .btn-primary:active{ transform:translateY(0); }
 
-        .btn-outline{ height:40px; padding:8px 14px; border-radius:10px; font-weight:700; cursor:pointer;
+        .btn-outline{
+          height:44px; padding:8px 14px; border-radius:12px; font-weight:700; cursor:pointer;
           background:rgba(255,255,255,0.28); color:#000; border:1px solid var(--panel-border);
-          backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); transition:transform 120ms ease, opacity 120ms ease, background 150ms ease; }
+          backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); transition:transform 120ms ease, opacity 120ms ease, background 150ms ease;
+        }
         @media (prefers-color-scheme: dark){ .btn-outline{ color:#fff; } }
         .btn-outline:hover{ transform:translateY(-1px); }
 
-        .btn-danger{ height:40px; padding:8px 14px; border-radius:10px; font-weight:700; cursor:pointer;
-          background:var(--danger); color:#fff; border:none; transition:transform 120ms ease, opacity 120ms ease; }
+        .btn-danger{
+          height:40px; padding:8px 14px; border-radius:10px; font-weight:700; cursor:pointer;
+          background:var(--danger); color:#fff; border:none; transition:transform 120ms ease, opacity 120ms ease;
+        }
         .btn-danger:hover{ transform:translateY(-1px); }
 
         .msg{ margin-top:10px; font-weight:700; color:var(--msg); text-align:center; }
@@ -912,30 +930,15 @@ const DashboardPage = () => {
         .upload-toggles{ display:grid; grid-template-columns:1fr; gap:10px; margin-bottom:8px; }
         @media (min-width:520px){ .upload-toggles{ grid-template-columns:1fr 1fr; } }
 
-        /* Centrado del botón de evidencia */
-        .upload-toggles--center{
-          grid-template-columns: 1fr;
-          justify-items: center;
-        }
-        @media (min-width:520px){
-          .upload-toggles--center{ grid-template-columns: 1fr; }
-        }
-        .upload-toggles--center .upload-btn{
-          width:100%;
-          max-width:440px;
-          margin-inline:auto;
-        }
+        .upload-toggles--center{ grid-template-columns: 1fr; justify-items: center; }
+        @media (min-width:520px){ .upload-toggles--center{ grid-template-columns: 1fr; } }
+        .upload-toggles--center .upload-btn{ width:100%; max-width:440px; margin-inline:auto; }
 
         .upload-btn{
-          position:relative;
-          display:flex; align-items:center; gap:12px; width:100%; min-height:76px; padding:12px;
-          border-radius:14px;
-          background: var(--panel);
-          border:1px solid var(--panel-border);
-          backdrop-filter: blur(14px) saturate(135%);
-          -webkit-backdrop-filter: blur(14px) saturate(135%);
-          box-shadow: 0 10px 24px rgba(0,0,0,0.22);
-          cursor:pointer; color:var(--title); font-weight:800;
+          position:relative; display:flex; align-items:center; gap:12px; width:100%; min-height:76px; padding:12px;
+          border-radius:14px; background: var(--panel); border:1px solid var(--panel-border);
+          backdrop-filter: blur(14px) saturate(135%); -webkit-backdrop-filter: blur(14px) saturate(135%);
+          box-shadow: 0 10px 24px rgba(0,0,0,0.22); cursor:pointer; color:var(--title); font-weight:800;
           transition: transform 120ms ease, box-shadow 150ms ease, background 150ms ease, border-color 150ms ease;
         }
         .upload-btn::after{
@@ -943,42 +946,30 @@ const DashboardPage = () => {
           background: linear-gradient(to bottom, rgba(255,255,255,0.25), rgba(255,255,255,0.06) 38%, rgba(0,0,0,0.08) 100%);
           mix-blend-mode:soft-light;
         }
-        .upload-btn:hover{
-          transform: translateY(-1px);
-          box-shadow: 0 14px 32px rgba(0,0,0,0.28);
-          border-color: rgba(255,255,255,0.32);
-        }
+        .upload-btn:hover{ transform: translateY(-1px); box-shadow: 0 14px 32px rgba(0,0,0,0.28); border-color: rgba(255,255,255,0.32); }
 
         .thumb-wrap{ position:relative; display:inline-grid; place-items:center; }
         .icon-slab{
           width:84px; height:64px; border-radius:12px; display:grid; place-items:center;
           background: linear-gradient(180deg, rgba(255,255,255,0.32), rgba(255,255,255,0.10));
           border:1px solid var(--panel-border);
-          backdrop-filter: blur(10px) saturate(120%);
-          -webkit-backdrop-filter: blur(10px) saturate(120%);
-          box-shadow: inset 0 1px 0 rgba(255,255,255,0.45), 0 6px 18px rgba(0,0,0,0.14);
-          color: var(--title);
+          backdrop-filter: blur(10px) saturate(120%); -webkit-backdrop-filter: blur(10px) saturate(120%);
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.45), 0 6px 18px rgba(0,0,0,0.14); color: var(--title);
         }
         @media (prefers-color-scheme: dark){
-          .icon-slab{
-            background: linear-gradient(180deg, rgba(255,255,255,0.18), rgba(255,255,255,0.08));
-          }
+          .icon-slab{ background: linear-gradient(180deg, rgba(255,255,255,0.18), rgba(255,255,255,0.08)); }
         }
         .upload-icon{ opacity:.95; }
 
         .thumb-box-lg{
-          width:128px; height:84px; border-radius:12px; overflow:hidden;
-          position:relative; display:grid; place-items:center;
-          background: linear-gradient(180deg, rgba(255,255,255,0.18), rgba(255,255,255,0.06));
-          border:1px solid var(--panel-border);
-          backdrop-filter: blur(8px);
-          -webkit-backdrop-filter: blur(8px);
+          width:128px; height:84px; border-radius:12px; overflow:hidden; position:relative; display:grid; place-items:center;
+          background: linear-gradient(180deg, rgba(255,255,255,0.18), rgba(255,255,255,0.06)); border:1px solid var(--panel-border);
+          backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
         }
         .thumb-box-lg.pdf{ background:#e94f37; }
         .thumb-img-lg{ width:100%; height:100%; object-fit:cover; display:block; }
         .thumb-count-lg{
-          position:absolute; right:-6px; bottom:-6px; background:rgba(0,0,0,0.78); color:#fff;
-          font-size:12px; border-radius:10px; padding:2px 6px; line-height:1;
+          position:absolute; right:-6px; bottom:-6px; background:rgba(0,0,0,0.78); color:#fff; font-size:12px; border-radius:10px; padding:2px 6px; line-height:1;
         }
 
         .pdf-badge{
@@ -988,12 +979,9 @@ const DashboardPage = () => {
         }
 
         .clear-x{
-          position:absolute; top:6px; right:6px; width:24px; height:24px; line-height:22px; text-align:center;
-          border-radius:10px;
-          background: var(--panel);
-          border:1px solid var(--panel-border);
-          backdrop-filter: blur(8px);
-          -webkit-backdrop-filter: blur(8px);
+          position:absolute; top:6px; right:6px; width:24px; height:24px; line-height:22px; text-align:center; border-radius:10px;
+          background: var(--panel); border:1px solid var(--panel-border);
+          backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
           color: var(--title); font-weight:800; cursor:pointer; user-select:none;
         }
 
@@ -1002,7 +990,7 @@ const DashboardPage = () => {
         /* GlassSelect */
         .glass-select { position: relative; }
         .select-trigger{
-          width:100%; height:48px; padding:10px 12px; font-size:16px; border-radius:10px; border:1px solid var(--input-border);
+          width:100%; height:48px; padding:10px 12px; font-size:16px; border-radius:12px; border:1px solid var(--input-border);
           background:var(--input-bg); color:var(--input-text); display:flex; align-items:center; justify-content:space-between; gap:8px; cursor:pointer;
           transition:border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
         }
@@ -1014,7 +1002,7 @@ const DashboardPage = () => {
         .dropdown-overlay{ position:fixed; inset:0; z-index:2147483647; background:rgba(0,0,0,0.12);
           backdrop-filter:blur(2.5px) saturate(120%); -webkit-backdrop-filter:blur(2.5px) saturate(120%); animation:fadeIn 120ms ease forwards; }
         .dropdown-panel{
-          position:fixed; max-height:60vh; overflow:auto; -webkit-overflow-scrolling:touch; background:var(--panel); border:1px solid var(--panel-border);
+          position:fixed; max-height:60svh; overflow:auto; -webkit-overflow-scrolling:touch; background:var(--panel); border:1px solid var(--panel-border);
           border-radius:14px; box-shadow:0 16px 40px rgba(0,0,0,0.28); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
           padding:6px; animation:pop 140ms ease;
         }
@@ -1028,13 +1016,13 @@ const DashboardPage = () => {
         @keyframes fadeIn{ from{opacity:0} to{opacity:1} }
         @keyframes pop{ from{opacity:0; transform:translateY(6px) scale(0.98)} to{opacity:1; transform:translateY(0) scale(1)} }
 
-        /* Stepper simple */
+        /* Stepper */
         .stepper .steps{
           display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:8px;
         }
         .stepper .step{
-          display:flex; align-items:center; gap:8px; padding:8px; border-radius:10px; border:1px solid var(--panel-border); background:var(--panel);
-          font-weight:700;
+          display:flex; align-items:center; gap:8px; padding:8px; border-radius:12px; border:1px solid var(--panel-border); background:var(--panel);
+          font-weight:700; font-size:clamp(12px,3.2vw,14px);
         }
         .stepper .step span{
           width:22px; height:22px; display:inline-grid; place-items:center; border-radius:999px; background:rgba(0,0,0,0.15);
@@ -1042,19 +1030,32 @@ const DashboardPage = () => {
         .stepper .step.current{ outline:2px solid rgba(0,0,0,0.18); }
         .stepper .step.done span{ background:#9ae6b4; }
         .step-quick{
-          display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-top:6px;
+          display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-top:6px; font-size:clamp(12px,3.2vw,14px);
         }
 
         .wizard-actions{
           display:flex; gap:10px; justify-content:space-between; align-items:center; margin-top:12px;
         }
+        /* Sticky actions en móvil */
+        @media (max-width: 520px){
+          .wizard-actions{
+            position: sticky;
+            bottom: max(8px, env(safe-area-inset-bottom, 0px));
+            background: linear-gradient(180deg, rgba(255,255,255,0.65), rgba(255,255,255,0.25));
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            padding: 8px;
+            border-radius: 12px;
+            border: 1px solid var(--panel-border);
+          }
+        }
 
         .info-row{
           display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px; color:var(--label);
-          font-size:.95rem;
+          font-size:.95rem; flex-wrap:wrap;
         }
 
-        /* Loader simple */
+        /* Loader */
         .loader-wrap{ display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:120px; }
         .spinner{
           width:40px; height:40px; border-radius:50%;
@@ -1063,9 +1064,11 @@ const DashboardPage = () => {
         }
         @keyframes spin{ to{ transform: rotate(360deg); } }
 
-        /* Visor PDF */
+        /* Visor PDF: usa dvh para barras móviles */
         .pdf-preview{
-          width:100%; height:70vh; border:none; border-radius:12px; background:#fff;
+          width:100%;
+          height: clamp(320px, 65dvh, 80dvh);
+          border:none; border-radius:12px; background:#fff;
         }
       `}</style>
     </div>
