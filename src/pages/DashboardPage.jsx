@@ -279,8 +279,11 @@ const DashboardPage = () => {
   };
 
   const handleCerrarSesion = () => {
-    localStorage.removeItem('sesionId');
-    localStorage.removeItem('nombreTecnico');
+    try {
+      localStorage.removeItem('sesionId');
+      localStorage.removeItem('nombreTecnico');
+      localStorage.removeItem('dashStep'); // <- limpia el paso persistido
+    } catch {}
     navigate('/');
   };
 
@@ -407,35 +410,38 @@ const DashboardPage = () => {
   };
 
   // Compartir por WhatsApp y luego cerrar sesión automáticamente
-const handleShareWhatsApp = () => {
-  if (!genUrl) return;
+  const handleShareWhatsApp = () => {
+    if (!genUrl) return;
 
-  const tiendaLabel = (tiendaOptions.find(o => o.value === selectedTienda)?.label || '').trim();
-  const texto = `Informe técnico${tiendaLabel ? ` - ${tiendaLabel}` : ''}\n${genUrl}`;
-  const waUrl = `https://wa.me/?text=${encodeURIComponent(texto)}`;
+    const tiendaLabel = (tiendaOptions.find(o => o.value === selectedTienda)?.label || '').trim();
+    const texto = `Informe técnico${tiendaLabel ? ` - ${tiendaLabel}` : ''}\n${genUrl}`;
+    const waUrl = `https://wa.me/?text=${encodeURIComponent(texto)}`;
 
-  // 1) Intentar abrir en nueva pestaña/ventana (mejor en escritorio)
-  const popup = window.open(waUrl, '_blank', 'noopener,noreferrer');
-
-  if (popup && !popup.closed) {
-    // Evita acceso del popup a la ventana original
-    popup.opener = null;
-    // 2) Pequeño delay para no interferir con el popup y cerrar sesión
-    setTimeout(() => {
-      handleCerrarSesion(); // limpia storage y navega a '/'
-    }, 400);
-  } else {
-    // 3) Fallback para iOS Safari / bloqueadores: abrir en la misma pestaña
-    window.location.href = waUrl;
-    // No podremos navegar a '/', pero limpiamos la sesión por si el usuario vuelve con "Atrás"
-    setTimeout(() => {
+    // Limpieza completa de estado + storage
+    const cleanupAll = () => {
       try {
+        resetFlow(); // limpia step, contadores, acta, generación (genUrl/genErr)
         localStorage.removeItem('sesionId');
         localStorage.removeItem('nombreTecnico');
+        localStorage.removeItem('dashStep'); // asegura que el próximo inicio sea paso 1
       } catch {}
-    }, 200);
-  }
-};
+    };
+
+    // Intento abrir en popup (desktop / algunos Android)
+    const popup = window.open(waUrl, '_blank', 'noopener,noreferrer');
+
+    if (popup && !popup.closed) {
+      popup.opener = null;
+      setTimeout(() => {
+        cleanupAll();
+        navigate('/');
+      }, 400);
+    } else {
+      // Fallback (iOS Safari / bloqueadores)
+      cleanupAll();
+      window.location.href = waUrl;
+    }
+  };
 
   // Opciones
   const deptOptions = useMemo(() => [{ value: '', label: 'Todos' }, ...departamentos.map(d => ({ value: d, label: d }))], [departamentos]);
@@ -1016,7 +1022,7 @@ const handleShareWhatsApp = () => {
         @keyframes fadeIn{ from{opacity:0} to{opacity:1} }
         @keyframes pop{ from{opacity:0; transform:translateY(6px) scale(0.98)} to{opacity:1; transform:translateY(0) scale(1)} }
 
-        /* Stepper */
+        /* Stepper (base desktop) */
         .stepper .steps{
           display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:8px;
         }
@@ -1031,6 +1037,20 @@ const handleShareWhatsApp = () => {
         .stepper .step.done span{ background:#9ae6b4; }
         .step-quick{
           display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-top:6px; font-size:clamp(12px,3.2vw,14px);
+        }
+
+        /* ===== Stepper responsive móvil ===== */
+        @media (max-width: 600px){
+          .stepper.card{ padding:14px; }
+          .stepper .steps{ grid-template-columns:repeat(2,1fr); gap:6px; }
+          .stepper .step{ padding:6px 8px; font-size:13px; border-radius:12px; }
+          .stepper .step span{ width:18px; height:18px; font-size:12px; }
+          .step-quick{ flex-direction:column; align-items:stretch; gap:6px; }
+          .step-quick .btn-outline{ width:100%; height:44px; }
+        }
+        @media (max-width: 360px){
+          .stepper .step{ font-size:12px; padding:6px; }
+          .stepper .step span{ width:16px; height:16px; }
         }
 
         .wizard-actions{
