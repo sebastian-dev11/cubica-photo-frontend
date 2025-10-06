@@ -2,27 +2,35 @@ import React, { useState } from 'react';
 import { login } from '../services/authService';
 import { useNavigate } from 'react-router-dom';
 
-const BG_URL = "https://png.pngtree.com/thumb_back/fh260/background/20231226/pngtree-radiant-golden-gradients-glistening-metal-texture-for-banners-and-backgrounds-image_13915236.png";
+/* Tiempos */
+const SLOW_MS = 1800;
+const ATTEMPT_TIMEOUT_MS = 12000;
+const MAX_WAIT_MS = 60000;
+const RETRY_DELAY_MS = 3000;
 
-/* Umbrales y tiempos */
-const SLOW_MS = 1800;        // mostrar mensaje de reactivacion si tarda mas que esto
-const ATTEMPT_TIMEOUT_MS = 12000; // tiempo maximo por intento
-const MAX_WAIT_MS = 60000;   // espera total antes de dar error
-const RETRY_DELAY_MS = 3000; // pausa entre intentos
+/* Mensajes rotativos de espera */
+const WAIT_MESSAGES = [
+  'Estableciendo canal seguro…',
+  'Sincronizando servicios…',
+  'Comprobando credenciales…',
+  'Preparando tu sesión…',
+  'Optimizando recursos…',
+  'Casi estamos…'
+];
 
 const LoginPage = () => {
-  /* Estados de formulario */
+  /* Estado de formulario */
   const [usuario, setUsuario] = useState('');
   const [contraseña, setContraseña] = useState('');
 
-  /* Estados de UI */
+  /* Estado de UI */
   const [mensaje, setMensaje] = useState('');
   const [cargando, setCargando] = useState(false);
   const [latenciaMs, setLatenciaMs] = useState(0);
 
   const navigate = useNavigate();
 
-  /* Helper timeout simple */
+  /* Helper timeout */
   const withTimeout = (promise, ms) =>
     Promise.race([
       promise,
@@ -42,325 +50,342 @@ const LoginPage = () => {
     setLatenciaMs(0);
 
     let slowTimer = null;
+    let rotateTimer = null;
+    let rotateIndex = 0;
     const tStart = performance.now();
 
     try {
-      /* Preparar mensaje de reactivacion si se demora el primer tramo */
-      slowTimer = setTimeout(() => {
+      /* Mensaje si demora el primer tramo */
+      slowTimer = window.setTimeout(() => {
         setMensaje('Estamos reactivando los servicios, por favor espera');
       }, SLOW_MS);
 
+      /* Mensajes dinámicos cada 10 s */
+      rotateTimer = window.setInterval(() => {
+        rotateIndex = (rotateIndex + 1) % WAIT_MESSAGES.length;
+        setMensaje(WAIT_MESSAGES[rotateIndex]);
+      }, 10000);
+
       /* Reintentos hasta MAX_WAIT_MS */
-      let intento = 0;
       let ex;
       while (performance.now() - tStart < MAX_WAIT_MS) {
-        intento += 1;
         try {
           const res = await withTimeout(login(usuario, contraseña), ATTEMPT_TIMEOUT_MS);
-
           const dtTotal = Math.round(performance.now() - tStart);
           setLatenciaMs(dtTotal);
 
-          if (dtTotal > SLOW_MS) {
-            setMensaje('Servicios listos, iniciando...');
-          } else {
-            setMensaje(res.mensaje || 'Acceso concedido');
-          }
+          if (dtTotal > SLOW_MS) setMensaje('Servicios listos, iniciando...');
+          else setMensaje(res && res.mensaje ? res.mensaje : 'Acceso concedido');
 
-          if (res.mensaje && res.mensaje.toLowerCase() === 'acceso concedido') {
+          if (res && res.mensaje && String(res.mensaje).toLowerCase() === 'acceso concedido') {
             localStorage.setItem('sesionId', usuario);
             if (res.nombre) localStorage.setItem('nombreTecnico', res.nombre);
             if (typeof res.isAdmin !== 'undefined') {
               localStorage.setItem('isAdmin', res.isAdmin ? '1' : '0');
             }
-            if (res.userId) {
-              localStorage.setItem('userId', res.userId);
-            }
+            if (res.userId) localStorage.setItem('userId', res.userId);
             navigate('/dashboard');
           } else {
-            setMensaje(res.mensaje || 'Credenciales incorrectas');
+            setMensaje((res && res.mensaje) || 'Credenciales incorrectas');
           }
-
-          return; // exito, salir
+          return;
         } catch (err) {
           ex = err;
-          /* Mientras haya presupuesto de tiempo, seguir esperando y reintentando */
           setMensaje('Estamos reactivando los servicios, por favor espera');
-          const tiempoRestante = MAX_WAIT_MS - (performance.now() - tStart);
-          if (tiempoRestante <= RETRY_DELAY_MS) break;
+          const restante = MAX_WAIT_MS - (performance.now() - tStart);
+          if (restante <= RETRY_DELAY_MS) break;
           await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
         }
       }
 
-      /* Si sale del bucle, excedio MAX_WAIT_MS */
+      /* Excedió MAX_WAIT_MS */
       if (ex && ex.message === 'timeout') {
-        setMensaje('No se pudo conectar. El servidor podria seguir reactivandose. Intenta nuevamente.');
+        setMensaje('No se pudo conectar. El servidor podría seguir reactivándose. Intenta nuevamente.');
       } else {
         setMensaje('No se pudo conectar. Intenta nuevamente.');
       }
     } catch (error) {
-      setMensaje('Error en el servidor o conexion');
+      setMensaje('Error en el servidor o conexión');
       console.error('Error en login:', error);
     } finally {
       if (slowTimer) clearTimeout(slowTimer);
+      if (rotateTimer) clearInterval(rotateTimer);
       setCargando(false);
     }
   };
 
   return (
-    <div className="login-root">
-      {/* Fondo */}
-      <div className="bg" style={{ backgroundImage: `url("${BG_URL}")` }} />
-      {/* Overlay */}
-      <div className="overlay" />
-
-      {/* Contenido */}
+    <div className="login-root" role="main">
       <div className="content">
-        <div className="card">
+        <section className={`card md-elevation ${cargando ? 'is-busy' : ''}`} aria-label="Formulario de inicio de sesión">
+          {/* Barra de progreso indeterminada */}
+          {cargando && <div className="md-progress" role="progressbar" aria-label="Cargando" />}
+
           <img
             src="https://res.cloudinary.com/drygjoxaq/image/upload/v1754102481/022e3445-0819-4ebc-962a-d9f0d772bf86_kmyqbw.jpg"
             alt="Logo Cubica"
             className="logo"
+            draggable={false}
           />
-          <h2 className="title">Bienvenido a Cubica Photo App</h2>
+          <h1 className="title">Bienvenido a Cubica Photo App</h1>
 
-          <form onSubmit={handleSubmit} className="form">
-            <div className="field">
-              <label className="label">Ingresa tu Cédula:</label>
+          <form onSubmit={handleSubmit} className="form" noValidate>
+            {/* Cédula */}
+            <div className="md-field">
               <input
+                id="usuario"
+                className="md-input"
                 type="text"
                 value={usuario}
                 onChange={(e) => setUsuario(e.target.value)}
+                placeholder=" "
                 required
-                className="input"
                 autoCapitalize="none"
                 autoCorrect="off"
+                autoComplete="username"
+                aria-required="true"
               />
+              <label htmlFor="usuario" className="md-label">Ingresa tu Cédula</label>
             </div>
 
-            <div className="field">
-              <label className="label">Contraseña:</label>
+            {/* Contraseña */}
+            <div className="md-field">
               <input
+                id="password"
+                className="md-input"
                 type="password"
                 value={contraseña}
                 onChange={(e) => setContraseña(e.target.value)}
+                placeholder=" "
                 required
-                className="input"
                 autoCapitalize="none"
                 autoCorrect="off"
+                autoComplete="current-password"
+                aria-required="true"
               />
+              <label htmlFor="password" className="md-label">Contraseña</label>
             </div>
 
-            {/* Mensaje dinamico */}
+            {/* Mensaje */}
             {mensaje && (
-              <p className="msg">
+              <p className="md-message" role="status">
                 {mensaje}
                 {latenciaMs > SLOW_MS ? ` (≈ ${Math.round(latenciaMs / 100) / 10}s)` : null}
               </p>
             )}
 
-            <button type="submit" className="btn" disabled={cargando}>
-              {cargando ? <span className="modern-spinner" aria-label="Cargando" /> : 'Ingresar'}
+            <button
+              type="submit"
+              className={`md-button md-button--filled ${cargando ? 'is-loading' : ''}`}
+              disabled={cargando}
+              aria-busy={cargando}
+            >
+              {cargando ? <span className="md-spinner" aria-label="Cargando" /> : 'Ingresar'}
             </button>
           </form>
-        </div>
+        </section>
       </div>
 
       {/* Estilos */}
       <style>{`
-        :root {
-          --gold: #fff200;
-          --ink: #0a0a0a;
-          --text: #333333;
-          --label: #555555;
-          --panel: rgba(255,255,255,0.30);
-          --panel-border: rgba(255,255,255,0.24);
-          --input-bg: rgba(255,255,255,0.85);
-          --input-text: #111111;
-          --input-border: rgba(0,0,0,0.18);
-          --placeholder: rgba(0,0,0,0.45);
-          --title: #222222;
-          --msg: #444444;
-          --overlay: linear-gradient(to bottom,
-                      rgba(255,242,0,0.35),
-                      rgba(255,242,0,0.05) 40%,
-                      rgba(0,0,0,0.10) 100%);
-          --focus-ring: rgba(255,242,0,0.25);
+        /* Reset para eliminar bordes blancos */
+        *, *::before, *::after { box-sizing: border-box; }
+        html, body, #root { height: 100%; }
+        html, body { margin: 0; background: #0f1113; }
+
+        /* Tokens */
+        :root{
+          --primary: #fff200;
+          --on-primary: #111111;
+          --bg: #0f1113;
+          --surface: #15181c;
+          --on-surface: #e9eaec;
+          --outline: rgba(255,255,255,0.18);
+          --outline-strong: rgba(255,255,255,0.28);
+          --label: #b8bcc3;
+          --focus: rgba(255,242,0,0.35);
         }
 
-        @media (prefers-color-scheme: dark) {
-          :root {
-            --text: #e9e9e9;
-            --label: #d3d3d3;
-            --panel: rgba(24,24,24,0.42);
-            --panel-border: rgba(255,255,255,0.18);
-            --input-bg: rgba(255,255,255,0.10);
-            --input-text: #f2f2f2;
-            --input-border: rgba(255,255,255,0.22);
-            --placeholder: rgba(255,255,255,0.55);
-            --title: #fafafa;
-            --msg: #efefef;
-            --overlay: linear-gradient(to bottom,
-                          rgba(255,242,0,0.28),
-                          rgba(0,0,0,0.25) 45%,
-                          rgba(0,0,0,0.45) 100%);
-            --focus-ring: rgba(255,242,0,0.35);
-          }
-        }
-
-        .login-root {
-          position: relative;
-          min-height: 100vh;
+        /* Lienzo */
+        .login-root{
+          min-height: 100dvh;
+          min-height: 100svh;
           width: 100%;
-          padding: max(12px, env(safe-area-inset-top, 0px)) 12px max(12px, env(safe-area-inset-bottom, 0px));
-          box-sizing: border-box;
-          font-family: Roboto, system-ui, -apple-system, Segoe UI, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
-          color: var(--text);
-          overflow: hidden;
-          -webkit-text-size-adjust: 100%;
-          text-size-adjust: 100%;
+          background: var(--bg);
+          color: var(--on-surface);
+          font-family: Inter, Roboto, system-ui, -apple-system, Segoe UI, Helvetica, Arial;
+          display: flex;
         }
-
-        .bg {
-          position: fixed;
-          inset: 0;
-          background-size: cover;
-          background-position: center;
-          background-repeat: no-repeat;
-          z-index: -2;
-          transform: translateZ(0);
-        }
-
-        .overlay {
-          position: fixed;
-          inset: 0;
-          z-index: -1;
-          background: var(--overlay);
-          pointer-events: none;
-        }
-
-        .content {
-          min-height: calc(100vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+        .content{
+          margin: auto;
+          width: 100%;
+          padding: clamp(16px, 3vw, 32px);
           display: flex;
           align-items: center;
           justify-content: center;
         }
 
-        .card {
-          width: 92%;
-          max-width: 380px;
-          padding: 24px;
+        /* Tarjeta */
+        .card{
+          position: relative;
+          width: min(440px, 92vw);
           border-radius: 16px;
-          background: var(--panel);
-          border: 1px solid var(--panel-border);
-          box-shadow: 0 10px 36px rgba(0,0,0,0.30);
-          text-align: center;
-          backdrop-filter: blur(14px);
-          -webkit-backdrop-filter: blur(14px);
-          transition: box-shadow 180ms ease;
+          background: var(--surface);
+          padding: 28px;
+          box-shadow: 0 8px 24px rgba(0,0,0,0.22);
+          animation: md-enter 260ms cubic-bezier(.2,.8,.2,1);
+          will-change: transform;
+        }
+        .card.is-busy{ animation: md-busy 700ms ease-out 1; }
+
+        /* Progreso indeterminado superior */
+        .md-progress{
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          height: 3px;
+          overflow: hidden;
+          border-top-left-radius: 16px;
+          border-top-right-radius: 16px;
+          background: transparent;
+        }
+        .md-progress::before{
+          content: "";
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(90deg, transparent 0, rgba(255,242,0,.2) 30%, var(--primary) 52%, rgba(255,242,0,.2) 74%, transparent 100%);
+          transform: translateX(-100%);
+          animation: md-indeterminate 1.2s cubic-bezier(.4,0,.2,1) infinite;
         }
 
-        .card:hover { box-shadow: 0 12px 42px rgba(0,0,0,0.34); }
-
-        .logo {
-          width: clamp(92px, 28vw, 120px);
+        /* Logo con brillo reducido */
+        .logo{
+          width: clamp(96px, 26vw, 120px);
           height: auto;
-          margin-bottom: 12px;
-          filter: drop-shadow(0 0 4px #ffffff);
-          user-select: none;
-          pointer-events: none;
-        }
-
-        .title {
-          margin: 0 0 14px 0;
-          color: var(--title);
-          font-weight: 700;
-          font-size: clamp(18px, 2.6vw, 22px);
-          letter-spacing: 0.2px;
-        }
-
-        .form { text-align: left; }
-        .field { margin-bottom: 14px; }
-
-        .label {
           display: block;
-          font-weight: 600;
-          color: var(--label);
-          margin-bottom: 6px;
-          font-size: 0.95rem;
+          margin: 0 auto 12px auto;
+          user-select: none;
+          filter: brightness(.88) contrast(.96);
+        }
+        @media (prefers-color-scheme: dark){
+          .logo{ filter: brightness(.85) contrast(.96); }
         }
 
-        .input {
+        .title{
+          margin: 0 0 18px 0;
+          text-align: center;
+          font-size: clamp(18px, 2.4vw, 22px);
+          font-weight: 700;
+          letter-spacing: .2px;
+        }
+
+        /* Formulario */
+        .form{ display: grid; gap: 16px; }
+        .md-field{ position: relative; }
+
+        .md-input{
           width: 100%;
-          box-sizing: border-box;
-          height: 48px;
-          padding: 10px 12px;
-          border-radius: 10px;
-          border: 1px solid var(--input-border);
-          background: var(--input-bg);
-          color: var(--input-text);
-          outline: none;
-          transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
+          height: 56px;
+          border-radius: 12px;
+          padding: 18px 16px 10px 16px;
+          border: 1px solid var(--outline);
+          background: transparent;
+          color: var(--on-surface);
           font-size: 16px;
+          outline: none;
+          transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+        }
+        .md-input::placeholder{ color: transparent; }
+        .md-input:focus{
+          border-color: var(--outline-strong);
+          box-shadow: 0 0 0 4px var(--focus);
+          background: transparent;
         }
 
-        .input:focus {
-          border-color: var(--input-border);
-          box-shadow: 0 0 0 3px var(--focus-ring);
-          background: rgba(255,255,255,0.95);
+        .md-label{
+          position: absolute;
+          left: 16px;
+          top: 18px;
+          color: var(--label);
+          font-size: 14px;
+          pointer-events: none;
+          transform-origin: left top;
+          transition: transform 160ms ease, color 160ms ease, top 160ms ease;
+          background: transparent;
+          padding: 0 4px;
+        }
+        .md-input:focus + .md-label,
+        .md-input:not(:placeholder-shown) + .md-label{
+          transform: translateY(-12px) scale(0.88);
+          color: var(--label);
         }
 
-        @media (prefers-color-scheme: dark) {
-          .input:focus { background: rgba(255,255,255,0.14); }
+        .md-message{
+          margin: 2px 2px 4px 2px;
+          min-height: 1.25rem;
+          font-size: 0.95rem;
+          font-weight: 600;
+          opacity: .95;
+          text-align: center;
         }
 
-        .btn {
-          width: 100%;
+        /* Botón con animación al cargar */
+        .md-button{
           height: 48px;
-          padding: 12px;
-          background: var(--gold);
-          color: #000;
           border: none;
-          border-radius: 10px;
+          border-radius: 12px;
+          padding: 0 16px;
           font-weight: 800;
           cursor: pointer;
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          transition: transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease;
           user-select: none;
+          transition: transform 120ms ease, box-shadow 180ms ease, opacity 120ms ease;
         }
-
-        .btn:hover { transform: translateY(-1px); }
-        .btn:active { transform: translateY(0); }
-        .btn:disabled { opacity: 0.7; cursor: not-allowed; }
-
-        .msg {
-          margin: 10px 0 12px 0;
-          font-weight: 700;
-          color: var(--msg);
-          text-align: center;
-          min-height: 1.2em;
+        .md-button--filled{
+          background: var(--primary);
+          color: var(--on-primary);
+          box-shadow: 0 6px 16px rgba(0,0,0,0.22);
         }
+        .md-button--filled:hover{ transform: translateY(-1px); box-shadow: 0 8px 20px rgba(0,0,0,0.26); }
+        .md-button--filled:active{ transform: translateY(0); box-shadow: 0 6px 16px rgba(0,0,0,0.22); }
+        .md-button:disabled{ opacity: .7; cursor: not-allowed; }
+        .md-button.is-loading{ animation: md-pulse 1.2s ease-in-out infinite; }
 
-        .modern-spinner {
-          width: 22px;
-          height: 22px;
-          border: 3px solid rgba(0,0,0,0.3);
-          border-top: 3px solid #000;
+        /* Spinner más estético (conic ring) */
+        .md-spinner{
+          --sz: 22px;
+          width: var(--sz);
+          height: var(--sz);
           border-radius: 50%;
-          animation: spin 0.8s linear infinite;
+          background:
+            conic-gradient(from 0deg, transparent 0 28%, var(--on-primary) 32% 64%, transparent 68% 100%);
+          -webkit-mask: radial-gradient(farthest-side, transparent calc(50% - 4px), #000 calc(50% - 3px));
+          mask: radial-gradient(farthest-side, transparent calc(50% - 4px), #000 calc(50% - 3px));
+          animation: md-rotate .9s linear infinite;
         }
 
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-
-        @media (min-width: 480px) {
-          .card { padding: 26px; }
-          .field { margin-bottom: 16px; }
+        /* Motion */
+        @keyframes md-enter{
+          from{ opacity: 0; transform: translateY(4px) scale(.995); }
+          to{ opacity: 1; transform: translateY(0) scale(1); }
         }
-
-        @media (min-width: 768px) {
-          .card { padding: 28px; border-radius: 18px; max-width: 400px; }
+        @keyframes md-busy{
+          0% { transform: translateY(0) scale(1); }
+          40% { transform: translateY(-1px) scale(1.005); }
+          100% { transform: translateY(0) scale(1); }
+        }
+        @keyframes md-indeterminate{
+          to { transform: translateX(100%); }
+        }
+        @keyframes md-rotate{
+          to { transform: rotate(360deg); }
+        }
+        @keyframes md-pulse{
+          0%,100% { box-shadow: 0 6px 16px rgba(0,0,0,0.22); transform: translateY(0); }
+          50% { box-shadow: 0 10px 22px rgba(0,0,0,0.26); transform: translateY(-1px); }
         }
       `}</style>
     </div>
