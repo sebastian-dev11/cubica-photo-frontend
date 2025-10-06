@@ -143,11 +143,25 @@ const useAnimatedNumber = (value, duration = 500) => {
   return display;
 };
 
+/* Hook: detectar móvil / pointer grueso */
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 560px), (pointer: coarse)');
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener ? mq.addEventListener('change', update) : mq.addListener(update);
+    return () => { mq.removeEventListener ? mq.removeEventListener('change', update) : mq.removeListener(update); };
+  }, []);
+  return isMobile;
+};
+
 /* =============================
    DashboardPage (JSX)
 ============================= */
 const DashboardPage = () => {
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
 
   /* Paso y estados */
   const [step, setStep] = useState(() => {
@@ -561,14 +575,31 @@ const DashboardPage = () => {
 
               <div className="field">
                 <label className="label"><strong>Ubicación del D1</strong></label>
-                <GlassSelect
-                  value={selectedTienda}
-                  onChange={onSelectTienda}
-                  options={tiendaOptions}
-                  placeholder={`Selecciona una tienda (${filteredTiendas.length})`}
-                  ariaLabel="Seleccionar tienda"
-                  disabled={tiendaOptions.length === 0}
-                />
+
+                {/* --- En móvil usamos select nativo para mejor usabilidad --- */}
+                {isMobile ? (
+                  <select
+                    className="select-native"
+                    value={selectedTienda}
+                    onChange={(e) => onSelectTienda(e.target.value)}
+                    disabled={tiendaOptions.length === 0}
+                    aria-label="Seleccionar tienda (móvil)"
+                  >
+                    <option value="">{`Selecciona una tienda (${filteredTiendas.length})`}</option>
+                    {tiendaOptions.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <GlassSelect
+                    value={selectedTienda}
+                    onChange={onSelectTienda}
+                    options={tiendaOptions}
+                    placeholder={`Selecciona una tienda (${filteredTiendas.length})`}
+                    ariaLabel="Seleccionar tienda"
+                    disabled={tiendaOptions.length === 0}
+                  />
+                )}
               </div>
 
               <div className="filters-actions">
@@ -868,6 +899,7 @@ const DashboardPage = () => {
           font-family: Inter, Roboto, system-ui, -apple-system, Segoe UI, Helvetica, Arial;
           -webkit-tap-highlight-color: transparent;
           overscroll-behavior-x: none;
+          touch-action: pan-y;
         }
 
         .topbar{
@@ -879,6 +911,14 @@ const DashboardPage = () => {
         }
         .hello{ font-weight:600; }
         .actions{ display:flex; gap:8px; flex-wrap:wrap; }
+
+        /* === Botón cerrar sesión igual a InformesPage === */
+        .btn-danger{
+          height:48px; padding:10px 14px; border-radius:10px; font-weight:700; cursor:pointer;
+          background: var(--danger); color:#fff; border:none;
+          transition: transform 120ms ease, opacity 120ms ease;
+        }
+        .btn-danger:hover{ transform: translateY(-1px); }
 
         .content{ display:flex; justify-content:center; width:100%; }
         .stack{ width:min(100%,960px); display:flex; flex-direction:column; align-items:center; gap:16px; padding:12px 12px 28px; }
@@ -907,6 +947,8 @@ const DashboardPage = () => {
           animation: md-indeterminate 1.2s cubic-bezier(.4,0,.2,1) infinite;
         }
 
+        .controls-row{ display:flex; gap:8px; flex-wrap:wrap; }
+
         .filters-grid{ display:grid; grid-template-columns:1fr; gap:10px; }
         @media (min-width:640px){ .filters-grid{ grid-template-columns:1fr 1fr; } }
         .filters-actions{ margin-top:6px; display:flex; align-items:center; justify-content:space-between; gap:8px; }
@@ -922,6 +964,13 @@ const DashboardPage = () => {
         .input{ height:48px; padding:10px 12px; }
         .textarea{ padding:10px 12px; resize:vertical; min-height:84px; }
         .input:focus, .textarea:focus{ box-shadow:0 0 0 4px var(--focus); border-color:var(--outline-strong); }
+
+        /* Select nativo para móvil (tienda) */
+        .select-native{
+          width:100%; height:52px; padding:10px 12px; border-radius:12px; border:1px solid var(--outline);
+          background:transparent; color:var(--on-surface); font-size:16px; appearance:auto;
+        }
+        .select-native:focus{ outline:none; box-shadow:0 0 0 4px var(--focus); border-color:var(--outline-strong); }
 
         .btn{
           width:100%; height:52px; padding:12px; background:var(--primary); color:var(--on-primary); border:none; border-radius:12px;
@@ -1024,7 +1073,7 @@ const DashboardPage = () => {
 
         .glass-select { position: relative; }
         .select-trigger{
-          width:100%; height:48px; padding:10px 12px; font-size:16px; border-radius:12px; border:1px solid var(--outline);
+          width:100%; height:52px; padding:12px; font-size:16px; border-radius:12px; border:1px solid var(--outline);
           background:transparent; color:var(--on-surface); display:flex; align-items:center; justify-content:space-between; gap:8px; cursor:pointer;
           transition:border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
         }
@@ -1039,7 +1088,7 @@ const DashboardPage = () => {
           border-radius:14px; box-shadow:0 16px 40px rgba(0,0,0,0.28); padding:6px; animation:pop 140ms ease; color:var(--on-surface);
           max-width: calc(100vw - 16px);
         }
-        .option{ display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 12px; border-radius:10px; font-size:16px; cursor:pointer; transition:background 120ms ease, transform 120ms ease; }
+        .option{ display:flex; align-items:center; justify-content:space-between; gap:8px; padding:12px; border-radius:10px; font-size:18px; cursor:pointer; transition:background 120ms ease, transform 120ms ease; }
         .option:hover, .option.active{ background:rgba(255,255,255,0.10); }
         .option.selected{ font-weight:700; }
         .option.empty{ opacity:.7; cursor:default; }
