@@ -835,9 +835,15 @@ const DashboardPage = () => {
 
       {/* Estilos */}
       <style>{`
-        *, *::before, *::after { box-sizing: border-box; }
+        /* --- No scroll horizontal, solo vertical --- */
+        :where(html, body){ margin:0; height:100%; overflow-x:hidden; overflow-y:auto; }
+        :where(.dash-root, .content, .stack){ overflow-x:hidden; }
+        *{ box-sizing:border-box; min-width:0; }
+        img, video, canvas{ max-width:100%; height:auto; display:block; }
+        .hint, .msg, .label, .title, .subtitle{ overflow-wrap:anywhere; word-break:break-word; }
+
         html, body, #root { height: 100%; }
-        html, body { margin: 0; background: #0f1113; }
+        html, body { background: #0f1113; }
 
         :root{
           --primary:#fff200;
@@ -861,6 +867,7 @@ const DashboardPage = () => {
           background:var(--bg); color:var(--on-surface);
           font-family: Inter, Roboto, system-ui, -apple-system, Segoe UI, Helvetica, Arial;
           -webkit-tap-highlight-color: transparent;
+          overscroll-behavior-x: none;
         }
 
         .topbar{
@@ -873,7 +880,7 @@ const DashboardPage = () => {
         .hello{ font-weight:600; }
         .actions{ display:flex; gap:8px; flex-wrap:wrap; }
 
-        .content{ display:flex; justify-content:center; }
+        .content{ display:flex; justify-content:center; width:100%; }
         .stack{ width:min(100%,960px); display:flex; flex-direction:column; align-items:center; gap:16px; padding:12px 12px 28px; }
 
         .title{ margin:6px 0 0 0; font-weight:800; font-size:clamp(18px,4.5vw,28px); letter-spacing:.2px; text-align:center; }
@@ -1030,6 +1037,7 @@ const DashboardPage = () => {
         .dropdown-panel{
           position:fixed; max-height:60svh; overflow:auto; -webkit-overflow-scrolling:touch; background:rgba(21,24,28,0.98); border:1px solid var(--outline);
           border-radius:14px; box-shadow:0 16px 40px rgba(0,0,0,0.28); padding:6px; animation:pop 140ms ease; color:var(--on-surface);
+          max-width: calc(100vw - 16px);
         }
         .option{ display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 12px; border-radius:10px; font-size:16px; cursor:pointer; transition:background 120ms ease, transform 120ms ease; }
         .option:hover, .option.active{ background:rgba(255,255,255,0.10); }
@@ -1044,18 +1052,6 @@ const DashboardPage = () => {
 
         .wizard-actions{
           display:flex; gap:10px; justify-content:space-between; align-items:center; margin-top:12px;
-        }
-        @media (max-width: 520px){
-          .wizard-actions{
-            position: sticky;
-            bottom: max(8px, env(safe-area-inset-bottom, 0px));
-            background: linear-gradient(180deg, rgba(21,24,28,0.92), rgba(21,24,28,0.86));
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
-            padding: 8px;
-            border-radius: 12px;
-            border: 1px solid var(--outline);
-          }
         }
 
         .stepper .steps{
@@ -1085,6 +1081,7 @@ const DashboardPage = () => {
 
         .pdf-preview{
           width:100%;
+          display:block;
           height: clamp(320px, 65dvh, 80dvh);
           border:none; border-radius:12px; background:#fff;
         }
