@@ -1084,11 +1084,18 @@ const DashboardPage = () => {
         }
         @keyframes spin{ to{ transform: rotate(360deg); } }
 
-        /* Visor PDF: usa dvh para barras móviles */
+        /* Visor PDF */
         .pdf-preview{
           width:100%;
           height: clamp(320px, 65dvh, 80dvh);
           border:none; border-radius:12px; background:#fff;
+        }
+        /* —— Ajuste para móvil: vista previa más baja para que el botón de WhatsApp quede a la vista —— */
+        @media (max-width: 600px){
+          .pdf-preview{ height: clamp(220px, 48dvh, 58dvh); }
+        }
+        @media (max-width: 380px){
+          .pdf-preview{ height: clamp(200px, 42dvh, 52dvh); }
         }
       `}</style>
     </div>
