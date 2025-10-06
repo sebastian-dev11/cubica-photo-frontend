@@ -158,6 +158,11 @@ const DashboardPage = () => {
   const [cargando, setCargando] = useState(false);
   const [cargandoActa, setCargandoActa] = useState(false);
 
+  // Estados de generación/preview
+  const [genLoading, setGenLoading] = useState(false);
+  const [genUrl, setGenUrl] = useState('');
+  const [genErr, setGenErr] = useState('');
+
   // Tiendas y filtros
   const [tiendas, setTiendas] = useState([]);
   const [selectedTienda, setSelectedTienda] = useState('');
@@ -330,28 +335,28 @@ const DashboardPage = () => {
   };
 
   // Limpiar selección de PDF
-const clearPdf = (e, opts = {}) => {
-  e?.stopPropagation?.();
-  const keepStatus = !!opts.keepStatus; // no tocar actaOK si es true
+  const clearPdf = (e, opts = {}) => {
+    e?.stopPropagation?.();
+    const keepStatus = !!opts.keepStatus; // no tocar actaOK si es true
 
-  setActa(null);
-  if (!keepStatus) setActaOK(false);
+    setActa(null);
+    if (!keepStatus) setActaOK(false);
 
-  if (pdfRef.current) pdfRef.current.value = '';
-  if (pdfPreviewUrl) { URL.revokeObjectURL(pdfPreviewUrl); setPdfPreviewUrl(null); }
-};
+    if (pdfRef.current) pdfRef.current.value = '';
+    if (pdfPreviewUrl) { URL.revokeObjectURL(pdfPreviewUrl); setPdfPreviewUrl(null); }
+  };
 
   // Limpiar imágenes del acta
-const clearImgs = (e, opts = {}) => {
-  e?.stopPropagation?.();
-  const keepStatus = !!opts.keepStatus; // no tocar actaOK si es true
+  const clearImgs = (e, opts = {}) => {
+    e?.stopPropagation?.();
+    const keepStatus = !!opts.keepStatus; // no tocar actaOK si es true
 
-  setActaImgs([]);
-  if (!keepStatus) setActaOK(false);
+    setActaImgs([]);
+    if (!keepStatus) setActaOK(false);
 
-  if (imgsRef.current) imgsRef.current.value = '';
-  if (imgPreviewUrl) { URL.revokeObjectURL(imgPreviewUrl); setImgPreviewUrl(null); }
-};
+    if (imgsRef.current) imgsRef.current.value = '';
+    if (imgPreviewUrl) { URL.revokeObjectURL(imgPreviewUrl); setImgPreviewUrl(null); }
+  };
 
   // Subir acta
   const handleSubirActa = async (e) => {
@@ -369,10 +374,10 @@ const clearImgs = (e, opts = {}) => {
       const data = await res.json();
       setMensajeActa(data?.mensaje || (res.ok ? 'Archivo(s) subido(s) correctamente' : 'Error al subir'));
       if (res.ok) {
-  clearPdf(null, { keepStatus: true });
-  clearImgs(null, { keepStatus: true });
-  setActaOK(true);
-}
+        clearPdf(null, { keepStatus: true });
+        clearImgs(null, { keepStatus: true });
+        setActaOK(true);
+      }
       setTimeout(() => setMensajeActa(''), 3000);
     } catch (error) {
       console.error(error);
@@ -382,57 +387,45 @@ const clearImgs = (e, opts = {}) => {
     }
   };
 
-  // Generar PDF, obtener URL de Cloudinary y compartir por WhatsApp
-const handleGenerarPDF = async () => {
-  if (!selectedTienda) {
-    window.alert('Selecciona una tienda antes de generar el PDF.');
-    return;
-  }
-  if (cntPrevias < 1 || cntPosteriores < 1) {
-    window.alert('Debes subir al menos 1 imagen PREVIA y 1 POSTERIOR para generar el informe.');
-    return;
-  }
+  // Generar PDF (sin abrir pestañas), obtener URL de Cloudinary y mostrar preview
+  const handleGenerarPDF = async () => {
+    if (!selectedTienda) {
+      window.alert('Selecciona una tienda antes de generar el PDF.');
+      return;
+    }
+    if (cntPrevias < 1 || cntPosteriores < 1) {
+      window.alert('Debes subir al menos 1 imagen PREVIA y 1 POSTERIOR para generar el informe.');
+      return;
+    }
 
-  // Abrir pestaña temprano para evitar bloqueo del popup
-  const win = window.open('', '_blank');
+    setGenErr('');
+    setGenUrl('');
+    setGenLoading(true);
 
-  try {
-    const jsonUrl = `https://cubica-photo-app.onrender.com/pdf/generar/${sesionId}?tiendaId=${selectedTienda}&format=json`;
-    const res = await fetch(jsonUrl, { headers: { Accept: 'application/json' } });
-    if (!res.ok) throw new Error('No se pudo obtener el enlace del informe');
-    const data = await res.json();
-    const cloudUrl = data?.url;
-    if (!cloudUrl) throw new Error('Respuesta sin URL de informe');
+    try {
+      const jsonUrl = `https://cubica-photo-app.onrender.com/pdf/generar/${sesionId}?tiendaId=${selectedTienda}&format=json`;
+      const res = await fetch(jsonUrl, { headers: { Accept: 'application/json' } });
+      if (!res.ok) throw new Error('No se pudo obtener el enlace del informe');
+      const data = await res.json();
+      const cloudUrl = data?.url;
+      if (!cloudUrl) throw new Error('Respuesta sin URL de informe');
+      setGenUrl(cloudUrl);
+    } catch (err) {
+      console.error(err);
+      setGenErr('Error al generar/obtener el enlace del informe. Intenta de nuevo.');
+    } finally {
+      setGenLoading(false);
+    }
+  };
 
-    // Mostrar el PDF en la pestaña abierta
-    if (win) win.location.href = cloudUrl; else window.open(cloudUrl, '_blank');
-
-    // Preparar link de WhatsApp con el URL correcto
+  // Compartir por WhatsApp usando la URL final de Cloudinary
+  const handleShareWhatsApp = () => {
+    if (!genUrl) return;
     const tiendaLabel = (tiendaOptions.find(o => o.value === selectedTienda)?.label || '').trim();
-    const texto = `Informe técnico${tiendaLabel ? ` - ${tiendaLabel}` : ''}\n${cloudUrl}`;
+    const texto = `Informe técnico${tiendaLabel ? ` - ${tiendaLabel}` : ''}\n${genUrl}`;
     const waUrl = `https://wa.me/?text=${encodeURIComponent(texto)}`;
-
-    const compartir = window.confirm('Informe generado. ¿Quieres compartir el enlace por WhatsApp ahora?');
-    if (compartir) window.open(waUrl, '_blank');
-
-  } catch (err) {
-    // Cerrar pestaña temporal si hubo error
-    try { if (win) win.close(); } catch (_) {}
-    console.error(err);
-    window.alert('Error al generar/obtener el enlace del informe. Intenta de nuevo.');
-    return;
-  } finally {
-    // Reiniciar flujo y cerrar sesión
-    resetFlow();
-    setSelectedTienda('');
-    limpiarFiltros();
-    setTimeout(() => {
-      localStorage.removeItem('sesionId');
-      localStorage.removeItem('nombreTecnico');
-      navigate('/');
-    }, 1200);
-  }
-};
+    window.open(waUrl, '_blank');
+  };
 
   // Opciones
   const deptOptions = useMemo(() => [{ value: '', label: 'Todos' }, ...departamentos.map(d => ({ value: d, label: d }))], [departamentos]);
@@ -468,6 +461,9 @@ const handleGenerarPDF = async () => {
     setCntPrevias(0);
     setCntPosteriores(0);
     setActaOK(false);
+    setGenLoading(false);
+    setGenUrl('');
+    setGenErr('');
   };
 
   return (
@@ -755,19 +751,72 @@ const handleGenerarPDF = async () => {
             </form>
           )}
 
-          {/* Paso 4: Generar PDF */}
+          {/* Paso 4: Generar / Carga / Preview / Compartir */}
           {step === 4 && (
             <>
-              <div className="card">
-                <h2 className="subtitle">Resumen</h2>
-                <div className="hint">Ubicación: <strong>{tiendaOptions.find(o => o.value === selectedTienda)?.label || 'Sin tienda'}</strong></div>
-                <div className="hint">Evidencias: {cntPrevias} previas · {cntPosteriores} posteriores</div>
-                <div className="hint">Acta: {actaOK ? 'Lista' : 'Pendiente'}</div>
-                <div className="wizard-actions">
-                  <button type="button" className="btn-outline" onClick={goBack}>Regresar</button>
+              {/* Estado inicial (resumen + botón generar) */}
+              {!genLoading && !genUrl && !genErr && (
+                <>
+                  <div className="card">
+                    <h2 className="subtitle">Resumen</h2>
+                    <div className="hint">Ubicación: <strong>{tiendaOptions.find(o => o.value === selectedTienda)?.label || 'Sin tienda'}</strong></div>
+                    <div className="hint">Evidencias: {cntPrevias} previas · {cntPosteriores} posteriores</div>
+                    <div className="hint">Acta: {actaOK ? 'Lista' : 'Pendiente'}</div>
+                    <div className="wizard-actions">
+                      <button type="button" className="btn-outline" onClick={goBack}>Regresar</button>
+                    </div>
+                  </div>
+                  <button onClick={handleGenerarPDF} className="btn-primary" disabled={cntPrevias < 1 || cntPosteriores < 1}>
+                    Generar informe
+                  </button>
+                </>
+              )}
+
+              {/* Cargando */}
+              {genLoading && (
+                <div className="card">
+                  <h2 className="subtitle">Generando informe</h2>
+                  <div className="loader-wrap">
+                    <div className="spinner" aria-label="Cargando" />
+                    <div className="hint" style={{ marginTop: 8 }}>Esto puede tardar unos segundos…</div>
+                  </div>
                 </div>
-              </div>
-              <button onClick={handleGenerarPDF} className="btn-primary" disabled={cntPrevias < 1 || cntPosteriores < 1}>Generar y compartir </button>
+              )}
+
+              {/* Error */}
+              {!genLoading && genErr && (
+                <div className="card">
+                  <h2 className="subtitle">Error</h2>
+                  <p className="msg">{genErr}</p>
+                  <div className="wizard-actions">
+                    <button type="button" className="btn-outline" onClick={() => { setGenErr(''); setGenUrl(''); }}>Intentar de nuevo</button>
+                    <button type="button" className="btn-outline" onClick={goBack}>Regresar</button>
+                  </div>
+                </div>
+              )}
+
+              {/* Preview + compartir */}
+              {!genLoading && genUrl && (
+                <>
+                  <div className="card">
+                    <h2 className="subtitle">Vista previa</h2>
+                    <div className="hint" style={{ marginBottom: 8 }}>Si el visor no carga, puedes abrir el PDF en otra pestaña.</div>
+                    <iframe
+                      title="Informe PDF"
+                      src={genUrl}
+                      className="pdf-preview"
+                    />
+                    <div className="wizard-actions" style={{ marginTop: 10 }}>
+                      <a className="btn-outline" href={genUrl} target="_blank" rel="noreferrer">Abrir en pestaña</a>
+                      <button type="button" className="btn" onClick={handleShareWhatsApp}>Compartir por WhatsApp</button>
+                    </div>
+                  </div>
+
+                  <div className="wizard-actions">
+                    <button type="button" className="btn-outline" onClick={resetFlow}>Reiniciar flujo</button>
+                  </div>
+                </>
+              )}
             </>
           )}
         </div>
@@ -1003,6 +1052,20 @@ const handleGenerarPDF = async () => {
         .info-row{
           display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px; color:var(--label);
           font-size:.95rem;
+        }
+
+        /* Loader simple */
+        .loader-wrap{ display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:120px; }
+        .spinner{
+          width:40px; height:40px; border-radius:50%;
+          border:4px solid rgba(0,0,0,0.2); border-top-color: currentColor;
+          animation: spin 1s linear infinite;
+        }
+        @keyframes spin{ to{ transform: rotate(360deg); } }
+
+        /* Visor PDF */
+        .pdf-preview{
+          width:100%; height:70vh; border:none; border-radius:12px; background:#fff;
         }
       `}</style>
     </div>
