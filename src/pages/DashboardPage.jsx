@@ -156,6 +156,12 @@ const useIsMobile = () => {
   return isMobile;
 };
 
+/* Generar un nuevo ID de sesión para aislar flujos */
+const newSessionId = () => {
+  // Simple, suficientemente único para este caso
+  return 'S' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+};
+
 /* =============================
    DashboardPage (JSX)
 ============================= */
@@ -168,6 +174,11 @@ const DashboardPage = () => {
     const v = Number(localStorage.getItem('dashStep') || 1);
     return Number.isFinite(v) && v >= 1 && v <= 4 ? v : 1;
   });
+
+  // sesionId como estado (para poder rotarlo al reiniciar flujo)
+  const [sesionId, setSesionId] = useState(() => localStorage.getItem('sesionId') || '');
+  const nombreTecnico = localStorage.getItem('nombreTecnico') || 'Técnico';
+  const isAdmin = sesionId.toLowerCase() === 'admin';
 
   const [imagen, setImagen] = useState(null);
   const [tipo, setTipo] = useState('previa');
@@ -206,12 +217,29 @@ const DashboardPage = () => {
   const [filtroCiudad, setFiltroCiudad] = useState('');
   const [searchText, setSearchText] = useState('');
 
-  const sesionId = localStorage.getItem('sesionId') || '';
-  const nombreTecnico = localStorage.getItem('nombreTecnico') || 'Técnico';
-  const isAdmin = sesionId.toLowerCase() === 'admin';
-
+  /* Guardas / navegación */
   useEffect(() => { if (!sesionId) navigate('/'); }, [navigate, sesionId]);
   useEffect(() => { localStorage.setItem('dashStep', String(step)); }, [step]);
+
+  /* Montaje: asegurar estado limpio (por si venía de otra ruta) */
+  useEffect(() => {
+    // limpiar inputs/URLs
+    if (pdfRef.current) pdfRef.current.value = '';
+    if (imgsRef.current) imgsRef.current.value = '';
+    if (evidenciaRef.current) evidenciaRef.current.value = '';
+    if (pdfPreviewUrl) { URL.revokeObjectURL(pdfPreviewUrl); setPdfPreviewUrl(null); }
+    if (imgPreviewUrl) { URL.revokeObjectURL(imgPreviewUrl); setImgPreviewUrl(null); }
+    if (evidPreviewUrl) { URL.revokeObjectURL(evidPreviewUrl); setEvidPreviewUrl(null); }
+    // estado clave
+    setImagen(null);
+    setActa(null);
+    setActaImgs([]);
+    setActaOK(false);
+    setGenLoading(false);
+    setGenUrl('');
+    setGenErr('');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /* Cargar tiendas */
   useEffect(() => {
@@ -268,7 +296,7 @@ const DashboardPage = () => {
     const url = URL.createObjectURL(acta);
     if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl);
     setPdfPreviewUrl(url);
-  }, [acta]);
+  }, [acta]); // eslint-disable-line
 
   useEffect(() => () => { if (imgPreviewUrl) URL.revokeObjectURL(imgPreviewUrl); }, [imgPreviewUrl]);
   useEffect(() => {
@@ -286,7 +314,7 @@ const DashboardPage = () => {
       if (imgPreviewUrl) URL.revokeObjectURL(imgPreviewUrl);
       setImgPreviewUrl(null);
     }
-  }, [actaImgs]);
+  }, [actaImgs]); // eslint-disable-line
 
   useEffect(() => () => { if (evidPreviewUrl) URL.revokeObjectURL(evidPreviewUrl); }, [evidPreviewUrl]);
   useEffect(() => {
@@ -303,7 +331,7 @@ const DashboardPage = () => {
       if (evidPreviewUrl) URL.revokeObjectURL(evidPreviewUrl);
       setEvidPreviewUrl(null);
     }
-  }, [imagen]);
+  }, [imagen]); // eslint-disable-line
 
   /* Contadores animados */
   const animPrev = useAnimatedNumber(cntPrevias, 450);
@@ -311,19 +339,8 @@ const DashboardPage = () => {
   useEffect(() => { if (cntPrevias >= 0) { setBumpPrev(true); const t = setTimeout(() => setBumpPrev(false), 340); return () => clearTimeout(t); } }, [cntPrevias]);
   useEffect(() => { if (cntPosteriores >= 0) { setBumpPost(true); const t = setTimeout(() => setBumpPost(false), 340); return () => clearTimeout(t); } }, [cntPosteriores]);
 
-  /* Acciones */
+  /* Acciones y limpieza */
   const limpiarFiltros = () => { setFiltroDepartamento(''); setFiltroCiudad(''); setSearchText(''); };
-
-  const handleCerrarSesion = () => {
-    try {
-      localStorage.removeItem('sesionId');
-      localStorage.removeItem('nombreTecnico');
-      localStorage.removeItem('dashStep');
-    } catch {}
-    navigate('/');
-  };
-
-  const pickEvid = () => evidenciaRef.current && evidenciaRef.current.click();
 
   const clearEvid = (e) => {
     e?.stopPropagation?.();
@@ -332,6 +349,25 @@ const DashboardPage = () => {
     if (evidPreviewUrl) { URL.revokeObjectURL(evidPreviewUrl); setEvidPreviewUrl(null); }
   };
 
+  const clearPdf = (e, opts = {}) => {
+    e?.stopPropagation?.();
+    const keepStatus = !!opts.keepStatus;
+    setActa(null);
+    if (!keepStatus) setActaOK(false);
+    if (pdfRef.current) pdfRef.current.value = '';
+    if (pdfPreviewUrl) { URL.revokeObjectURL(pdfPreviewUrl); setPdfPreviewUrl(null); }
+  };
+
+  const clearImgs = (e, opts = {}) => {
+    e?.stopPropagation?.();
+    const keepStatus = !!opts.keepStatus;
+    setActaImgs([]);
+    if (!keepStatus) setActaOK(false);
+    if (imgsRef.current) imgsRef.current.value = '';
+    if (imgPreviewUrl) { URL.revokeObjectURL(imgPreviewUrl); setImgPreviewUrl(null); }
+  };
+
+  /* Subidas */
   const handleSubirImagen = async (e) => {
     e.preventDefault();
     if (!imagen || !tipo || !selectedTienda) { setMensaje('Por favor completa todos los campos.'); return; }
@@ -365,24 +401,6 @@ const DashboardPage = () => {
     }
   };
 
-  const clearPdf = (e, opts = {}) => {
-    e?.stopPropagation?.();
-    const keepStatus = !!opts.keepStatus;
-    setActa(null);
-    if (!keepStatus) setActaOK(false);
-    if (pdfRef.current) pdfRef.current.value = '';
-    if (pdfPreviewUrl) { URL.revokeObjectURL(pdfPreviewUrl); setPdfPreviewUrl(null); }
-  };
-
-  const clearImgs = (e, opts = {}) => {
-    e?.stopPropagation?.();
-    const keepStatus = !!opts.keepStatus;
-    setActaImgs([]);
-    if (!keepStatus) setActaOK(false);
-    if (imgsRef.current) imgsRef.current.value = '';
-    if (imgPreviewUrl) { URL.revokeObjectURL(imgPreviewUrl); setImgPreviewUrl(null); }
-  };
-
   const handleSubirActa = async (e) => {
     e.preventDefault();
     if (!acta && actaImgs.length === 0) { setMensajeActa('Selecciona un PDF o una imagen del acta'); return; }
@@ -411,6 +429,7 @@ const DashboardPage = () => {
     }
   };
 
+  /* Generar PDF */
   const handleGenerarPDF = async () => {
     if (!selectedTienda) { window.alert('Selecciona una tienda antes de generar el PDF.'); return; }
     if (cntPrevias < 1 || cntPosteriores < 1) { window.alert('Debes subir al menos 1 imagen PREVIA y 1 POSTERIOR para generar el informe.'); return; }
@@ -432,6 +451,7 @@ const DashboardPage = () => {
     }
   };
 
+  /* Compartir y cerrar sesión */
   const handleShareWhatsApp = () => {
     if (!genUrl) return;
 
@@ -442,7 +462,7 @@ const DashboardPage = () => {
 
     const cleanupAll = () => {
       try {
-        resetFlow();
+        resetFlow(true); // true = no rotar aquí porque vamos a salir
         localStorage.removeItem('sesionId');
         localStorage.removeItem('nombreTecnico');
         localStorage.removeItem('dashStep');
@@ -459,6 +479,33 @@ const DashboardPage = () => {
     }
   };
 
+  const handleCerrarSesion = () => {
+    // Limpieza fuerte + salida
+    try {
+      // limpiar inputs y URLs
+      if (pdfRef.current) pdfRef.current.value = '';
+      if (imgsRef.current) imgsRef.current.value = '';
+      if (evidenciaRef.current) evidenciaRef.current.value = '';
+      if (pdfPreviewUrl) { URL.revokeObjectURL(pdfPreviewUrl); }
+      if (imgPreviewUrl) { URL.revokeObjectURL(imgPreviewUrl); }
+      if (evidPreviewUrl) { URL.revokeObjectURL(evidPreviewUrl); }
+    } catch {}
+    // estado
+    setImagen(null); setActa(null); setActaImgs([]); setActaOK(false);
+    setCntPrevias(0); setCntPosteriores(0);
+    setGenLoading(false); setGenUrl(''); setGenErr('');
+    setSelectedTienda(''); setSearchText(''); setFiltroDepartamento(''); setFiltroCiudad('');
+    setTipo('previa'); setObservacion('');
+
+    // storage
+    localStorage.removeItem('sesionId');
+    localStorage.removeItem('nombreTecnico');
+    localStorage.removeItem('dashStep');
+    setSesionId('');
+
+    navigate('/');
+  };
+
   /* Opciones */
   const departamentosOptions = useMemo(() => [{ value: '', label: 'Todos' }, ...departamentos.map(d => ({ value: d, label: d }))], [departamentos]);
   const ciudadesOptions = useMemo(() => [{ value: '', label: 'Todas' }, ...ciudades.map(c => ({ value: c, label: c }))], [ciudades]);
@@ -467,6 +514,7 @@ const DashboardPage = () => {
 
   const pickPdf = () => pdfRef.current && pdfRef.current.click();
   const pickImgs = () => imgsRef.current && imgsRef.current.click();
+  const pickEvid = () => evidenciaRef.current && evidenciaRef.current.click();
 
   const onSelectTienda = (val) => {
     if (step > 1) return;
@@ -483,7 +531,29 @@ const DashboardPage = () => {
 
   const goNext = () => setStep(s => Math.min(4, s + 1));
   const goBack = () => setStep(s => Math.max(1, s - 1));
-  const resetFlow = () => {
+
+  /* Reiniciar flujo:
+     - Limpia imágenes/inputs/vistas previas y contadores
+     - Rota sesionId para evitar que el PDF use archivos subidos en el flujo anterior
+  */
+  const resetFlow = (skipRotate = false) => {
+    // Limpieza de archivos/URLs
+    try {
+      if (evidenciaRef.current) evidenciaRef.current.value = '';
+      if (pdfRef.current) pdfRef.current.value = '';
+      if (imgsRef.current) imgsRef.current.value = '';
+      if (evidPreviewUrl) { URL.revokeObjectURL(evidPreviewUrl); }
+      if (pdfPreviewUrl) { URL.revokeObjectURL(pdfPreviewUrl); }
+      if (imgPreviewUrl) { URL.revokeObjectURL(imgPreviewUrl); }
+    } catch {}
+    setImagen(null);
+    setActa(null);
+    setActaImgs([]);
+    setEvidPreviewUrl(null);
+    setPdfPreviewUrl(null);
+    setImgPreviewUrl(null);
+
+    // Estado de flujo
     setStep(1);
     setCntPrevias(0);
     setCntPosteriores(0);
@@ -491,6 +561,18 @@ const DashboardPage = () => {
     setGenLoading(false);
     setGenUrl('');
     setGenErr('');
+    setTipo('previa');
+    setObservacion('');
+
+    // Opcional: mantener la tienda o no. Aquí la dejamos como está.
+    // Si quisieras limpiarla también: setSelectedTienda('');
+
+    // Rotar sesión para aislar evidencias ya subidas
+    if (!skipRotate) {
+      const next = newSessionId();
+      setSesionId(next);
+      localStorage.setItem('sesionId', next);
+    }
   };
 
   return (
@@ -508,11 +590,11 @@ const DashboardPage = () => {
           <h1 className="title">Dashboard</h1>
 
           <div className="stepper card">
-            <div className="steps">
-              <div className={`step ${step >= 1 ? 'done' : ''} ${step === 1 ? 'current' : ''}`}><span>1</span> Ubicación</div>
-              <div className={`step ${step >= 2 ? 'done' : ''} ${step === 2 ? 'current' : ''}`}><span>2</span> Evidencias</div>
-              <div className={`step ${step >= 3 ? 'done' : ''} ${step === 3 ? 'current' : ''}`}><span>3</span> Acta</div>
-              <div className={`step ${step >= 4 ? 'done' : ''} ${step === 4 ? 'current' : ''}`}><span>4</span> PDF</div>
+            <div className="steps" role="tablist" aria-label="Progreso">
+              <div className={`step ${step >= 1 ? 'done' : ''} ${step === 1 ? 'current' : ''}`} role="tab" aria-selected={step===1}><span>1</span> Ubicación</div>
+              <div className={`step ${step >= 2 ? 'done' : ''} ${step === 2 ? 'current' : ''}`} role="tab" aria-selected={step===2}><span>2</span> Evidencias</div>
+              <div className={`step ${step >= 3 ? 'done' : ''} ${step === 3 ? 'current' : ''}`} role="tab" aria-selected={step===3}><span>3</span> Acta</div>
+              <div className={`step ${step >= 4 ? 'done' : ''} ${step === 4 ? 'current' : ''}`} role="tab" aria-selected={step===4}><span>4</span> PDF</div>
             </div>
 
             <div className="step-quick">
@@ -527,7 +609,7 @@ const DashboardPage = () => {
                 </span>
               </div>
               <div>Acta: {actaOK ? 'Lista' : 'Pendiente'}</div>
-              <button type="button" className="btn-outline" onClick={resetFlow}>Reiniciar flujo</button>
+              <button type="button" className="btn-outline" onClick={() => resetFlow(false)}>Reiniciar flujo</button>
             </div>
           </div>
 
@@ -541,7 +623,7 @@ const DashboardPage = () => {
                   <GlassSelect
                     value={filtroDepartamento}
                     onChange={(val) => { setFiltroDepartamento(val); setFiltroCiudad(''); }}
-                    options={departamentosOptions}
+                    options={[{ value: '', label: 'Todos' }, ...departamentos.map(d => ({ value: d, label: d }))]}
                     placeholder="Todos"
                     ariaLabel="Filtrar por departamento"
                   />
@@ -551,10 +633,10 @@ const DashboardPage = () => {
                   <GlassSelect
                     value={filtroCiudad}
                     onChange={(val) => setFiltroCiudad(val)}
-                    options={ciudadesOptions}
+                    options={[{ value: '', label: 'Todas' }, ...ciudades.map(c => ({ value: c, label: c }))]}
                     placeholder="Todas"
                     ariaLabel="Filtrar por ciudad"
-                    disabled={ciudadesOptions.length <= 1}
+                    disabled={ciudades.length === 0}
                   />
                 </div>
               </div>
@@ -575,8 +657,6 @@ const DashboardPage = () => {
 
               <div className="field">
                 <label className="label"><strong>Ubicación del D1</strong></label>
-
-                {/* --- En móvil usamos select nativo para mejor usabilidad --- */}
                 {isMobile ? (
                   <select
                     className="select-native"
@@ -586,18 +666,18 @@ const DashboardPage = () => {
                     aria-label="Seleccionar tienda (móvil)"
                   >
                     <option value="">{`Selecciona una tienda (${filteredTiendas.length})`}</option>
-                    {tiendaOptions.map(opt => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    {filteredTiendas.map(t => (
+                      <option key={t._id} value={t._id}>{`${t.nombre} — ${t.departamento}, ${t.ciudad}`}</option>
                     ))}
                   </select>
                 ) : (
                   <GlassSelect
                     value={selectedTienda}
                     onChange={onSelectTienda}
-                    options={tiendaOptions}
+                    options={filteredTiendas.map(t => ({ value: t._id, label: `${t.nombre} — ${t.departamento}, ${t.ciudad}` }))}
                     placeholder={`Selecciona una tienda (${filteredTiendas.length})`}
                     ariaLabel="Seleccionar tienda"
-                    disabled={tiendaOptions.length === 0}
+                    disabled={filteredTiendas.length === 0}
                   />
                 )}
               </div>
@@ -619,7 +699,7 @@ const DashboardPage = () => {
               <h2 className="subtitle">Subir Imagen</h2>
 
               <div className="info-row">
-                <div>Tienda: <strong>{tiendaOptions.find(o => o.value === selectedTienda)?.label || 'Sin tienda'}</strong></div>
+                <div>Tienda: <strong>{filteredTiendas.find(t => t._id === selectedTienda)?.nombre ? `${filteredTiendas.find(t => t._id === selectedTienda)?.nombre} — ${filteredTiendas.find(t => t._id === selectedTienda)?.departamento}, ${filteredTiendas.find(t => t._id === selectedTienda)?.ciudad}` : 'Sin tienda'}</strong></div>
                 <div className="counters">
                   <span className={`badge ${bumpPrev ? 'bump' : ''}`}><span className="dot pre" />{animPrev} previas</span>
                   <span className={`badge ${bumpPost ? 'bump' : ''}`}><span className="dot post" />{animPost} posteriores</span>
@@ -672,7 +752,7 @@ const DashboardPage = () => {
                 <GlassSelect
                   value={tipo}
                   onChange={(v) => setTipo(v)}
-                  options={tipoOptions}
+                  options={[{ value: 'previa', label: 'Previa' }, { value: 'posterior', label: 'Posterior' }]}
                   placeholder="Selecciona tipo"
                   ariaLabel="Seleccionar tipo de imagen"
                 />
@@ -807,7 +887,7 @@ const DashboardPage = () => {
                 <>
                   <div className="card">
                     <h2 className="subtitle">Resumen</h2>
-                    <div className="hint">Ubicación: <strong>{tiendaOptions.find(o => o.value === selectedTienda)?.label || 'Sin tienda'}</strong></div>
+                    <div className="hint">Ubicación: <strong>{filteredTiendas.find(t => t._id === selectedTienda) ? `${filteredTiendas.find(t => t._id === selectedTienda)?.nombre} — ${filteredTiendas.find(t => t._id === selectedTienda)?.departamento}, ${filteredTiendas.find(t => t._id === selectedTienda)?.ciudad}` : 'Sin tienda'}</strong></div>
                     <div className="hint">Evidencias: {animPrev} previas · {animPost} posteriores</div>
                     <div className="hint">Acta: {actaOK ? 'Lista' : 'Pendiente'}</div>
                     <div className="wizard-actions">
@@ -855,7 +935,7 @@ const DashboardPage = () => {
                   </div>
 
                   <div className="wizard-actions">
-                    <button type="button" className="btn-outline" onClick={resetFlow}>Reiniciar flujo</button>
+                    <button type="button" className="btn-outline" onClick={() => resetFlow(false)}>Reiniciar flujo</button>
                   </div>
                 </>
               )}
@@ -946,8 +1026,6 @@ const DashboardPage = () => {
           transform: translateX(-100%);
           animation: md-indeterminate 1.2s cubic-bezier(.4,0,.2,1) infinite;
         }
-
-        .controls-row{ display:flex; gap:8px; flex-wrap:wrap; }
 
         .filters-grid{ display:grid; grid-template-columns:1fr; gap:10px; }
         @media (min-width:640px){ .filters-grid{ grid-template-columns:1fr 1fr; } }
@@ -1103,8 +1181,12 @@ const DashboardPage = () => {
           display:flex; gap:10px; justify-content:space-between; align-items:center; margin-top:12px;
         }
 
+        /* Stepper: 4 columnas en desktop, 2x2 en móvil */
         .stepper .steps{
           display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:8px;
+        }
+        @media (max-width:560px){
+          .stepper .steps{ grid-template-columns:repeat(2,1fr); }
         }
         .stepper .step{
           display:flex; align-items:center; gap:8px; padding:8px; border-radius:12px; border:1px solid var(--outline); background:rgba(255,255,255,0.06);
