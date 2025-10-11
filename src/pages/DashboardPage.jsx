@@ -5,6 +5,11 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
 /* =============================
+   Config API
+============================= */
+const API_BASE = 'https://cubica-photo-app.onrender.com';
+
+/* =============================
    GlassSelect (JSX/JS puro)
 ============================= */
 const GlassSelect = ({ value, onChange, options, placeholder = 'Selecciona…', disabled = false, ariaLabel }) => {
@@ -158,9 +163,18 @@ const useIsMobile = () => {
 
 /* Generar un nuevo ID de sesión para aislar flujos */
 const newSessionId = () => {
-  // Simple, suficientemente único para este caso
   return 'S' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
 };
+
+/* Llamada al backend para barrer por sesionId */
+async function serverResetSession(curId) {
+  if (!curId) return;
+  try {
+    await fetch(`${API_BASE}/pdf/session/reset/${encodeURIComponent(curId)}`, { method: 'POST' });
+  } catch (e) {
+    console.error('No se pudo resetear la sesión en servidor:', e);
+  }
+}
 
 /* =============================
    DashboardPage (JSX)
@@ -178,7 +192,7 @@ const DashboardPage = () => {
   // sesionId como estado (para poder rotarlo al reiniciar flujo)
   const [sesionId, setSesionId] = useState(() => localStorage.getItem('sesionId') || '');
   const nombreTecnico = localStorage.getItem('nombreTecnico') || 'Técnico';
-  const isAdmin = sesionId.toLowerCase() === 'admin';
+  const isAdmin = (sesionId || '').toLowerCase() === 'admin';
 
   const [imagen, setImagen] = useState(null);
   const [tipo, setTipo] = useState('previa');
@@ -223,14 +237,12 @@ const DashboardPage = () => {
 
   /* Montaje: asegurar estado limpio (por si venía de otra ruta) */
   useEffect(() => {
-    // limpiar inputs/URLs
     if (pdfRef.current) pdfRef.current.value = '';
     if (imgsRef.current) imgsRef.current.value = '';
     if (evidenciaRef.current) evidenciaRef.current.value = '';
     if (pdfPreviewUrl) { URL.revokeObjectURL(pdfPreviewUrl); setPdfPreviewUrl(null); }
     if (imgPreviewUrl) { URL.revokeObjectURL(imgPreviewUrl); setImgPreviewUrl(null); }
     if (evidPreviewUrl) { URL.revokeObjectURL(evidPreviewUrl); setEvidPreviewUrl(null); }
-    // estado clave
     setImagen(null);
     setActa(null);
     setActaImgs([]);
@@ -245,7 +257,7 @@ const DashboardPage = () => {
   useEffect(() => {
     const fetchTiendas = async () => {
       try {
-        const res = await axios.get('https://cubica-photo-app.onrender.com/tiendas');
+        const res = await axios.get(`${API_BASE}/tiendas`);
         setTiendas(Array.isArray(res.data) ? res.data : []);
       } catch (error) {
         console.error('Error al obtener tiendas del backend:', error);
@@ -339,7 +351,7 @@ const DashboardPage = () => {
   useEffect(() => { if (cntPrevias >= 0) { setBumpPrev(true); const t = setTimeout(() => setBumpPrev(false), 340); return () => clearTimeout(t); } }, [cntPrevias]);
   useEffect(() => { if (cntPosteriores >= 0) { setBumpPost(true); const t = setTimeout(() => setBumpPost(false), 340); return () => clearTimeout(t); } }, [cntPosteriores]);
 
-  /* Acciones y limpieza */
+  /* Acciones y limpieza (cliente) */
   const limpiarFiltros = () => { setFiltroDepartamento(''); setFiltroCiudad(''); setSearchText(''); };
 
   const clearEvid = (e) => {
@@ -382,7 +394,7 @@ const DashboardPage = () => {
     const tipoEnviado = tipo;
     setCargando(true);
     try {
-      const res = await fetch('https://cubica-photo-app.onrender.com/imagenes/subir', { method: 'POST', body: formData });
+      const res = await fetch(`${API_BASE}/imagenes/subir`, { method: 'POST', body: formData });
       const data = await res.json();
       if (res.ok) {
         if (tipoEnviado === 'previa') setCntPrevias(x => x + 1);
@@ -412,7 +424,7 @@ const DashboardPage = () => {
 
     setCargandoActa(true);
     try {
-      const res = await fetch('https://cubica-photo-app.onrender.com/acta/subir', { method: 'POST', body: formData });
+      const res = await fetch(`${API_BASE}/acta/subir`, { method: 'POST', body: formData });
       const data = await res.json();
       setMensajeActa(data?.mensaje || (res.ok ? 'Archivo(s) subido(s) correctamente' : 'Error al subir'));
       if (res.ok) {
@@ -436,7 +448,7 @@ const DashboardPage = () => {
 
     setGenErr(''); setGenUrl(''); setGenLoading(true);
     try {
-      const jsonUrl = `https://cubica-photo-app.onrender.com/pdf/generar/${sesionId}?tiendaId=${selectedTienda}&format=json`;
+      const jsonUrl = `${API_BASE}/pdf/generar/${sesionId}?tiendaId=${selectedTienda}&format=json`;
       const res = await fetch(jsonUrl, { headers: { Accept: 'application/json' } });
       if (!res.ok) throw new Error('No se pudo obtener el enlace del informe');
       const data = await res.json();
@@ -451,6 +463,50 @@ const DashboardPage = () => {
     }
   };
 
+  /* Reiniciar flujo + barrido servidor */
+  const resetFlow = async (skipRotate = false) => {
+    try {
+      await serverResetSession(sesionId);
+    } catch (e) {
+      console.error('Fallo al barrer en backend durante resetFlow:', e);
+    }
+
+    try {
+      if (evidenciaRef.current) evidenciaRef.current.value = '';
+      if (pdfRef.current) pdfRef.current.value = '';
+      if (imgsRef.current) imgsRef.current.value = '';
+      if (evidPreviewUrl) { URL.revokeObjectURL(evidPreviewUrl); }
+      if (pdfPreviewUrl) { URL.revokeObjectURL(pdfPreviewUrl); }
+      if (imgPreviewUrl) { URL.revokeObjectURL(imgPreviewUrl); }
+    } catch {}
+
+    setImagen(null);
+    setActa(null);
+    setActaImgs([]);
+    setEvidPreviewUrl(null);
+    setPdfPreviewUrl(null);
+    setImgPreviewUrl(null);
+
+    setStep(1);
+    setCntPrevias(0);
+    setCntPosteriores(0);
+    setActaOK(false);
+    setGenLoading(false);
+    setGenUrl('');
+    setGenErr('');
+    setTipo('previa');
+    setObservacion('');
+
+    // Mantener tienda seleccionada; si deseas limpiarla, descomenta la siguiente línea:
+    // setSelectedTienda('');
+
+    if (!skipRotate) {
+      const next = newSessionId();
+      setSesionId(next);
+      localStorage.setItem('sesionId', next);
+    }
+  };
+
   /* Compartir y cerrar sesión */
   const handleShareWhatsApp = () => {
     if (!genUrl) return;
@@ -460,9 +516,14 @@ const DashboardPage = () => {
     const texto = `Informe técnico${tiendaLabel ? ` - ${tiendaLabel}` : ''}\n${genUrl}`;
     const waUrl = `https://wa.me/?text=${encodeURIComponent(texto)}`;
 
-    const cleanupAll = () => {
+    const cleanupAll = async () => {
       try {
-        resetFlow(true); // true = no rotar aquí porque vamos a salir
+        await serverResetSession(sesionId);
+      } catch (e) {
+        console.error('Fallo barrido backend en compartir:', e);
+      }
+      try {
+        await resetFlow(true); // true = no rotar (vamos a salir)
         localStorage.removeItem('sesionId');
         localStorage.removeItem('nombreTecnico');
         localStorage.removeItem('dashStep');
@@ -479,10 +540,14 @@ const DashboardPage = () => {
     }
   };
 
-  const handleCerrarSesion = () => {
-    // Limpieza fuerte + salida
+  const handleCerrarSesion = async () => {
     try {
-      // limpiar inputs y URLs
+      await serverResetSession(sesionId);
+    } catch (e) {
+      console.error('Fallo barrido backend al cerrar sesión:', e);
+    }
+
+    try {
       if (pdfRef.current) pdfRef.current.value = '';
       if (imgsRef.current) imgsRef.current.value = '';
       if (evidenciaRef.current) evidenciaRef.current.value = '';
@@ -490,14 +555,13 @@ const DashboardPage = () => {
       if (imgPreviewUrl) { URL.revokeObjectURL(imgPreviewUrl); }
       if (evidPreviewUrl) { URL.revokeObjectURL(evidPreviewUrl); }
     } catch {}
-    // estado
+
     setImagen(null); setActa(null); setActaImgs([]); setActaOK(false);
     setCntPrevias(0); setCntPosteriores(0);
     setGenLoading(false); setGenUrl(''); setGenErr('');
     setSelectedTienda(''); setSearchText(''); setFiltroDepartamento(''); setFiltroCiudad('');
     setTipo('previa'); setObservacion('');
 
-    // storage
     localStorage.removeItem('sesionId');
     localStorage.removeItem('nombreTecnico');
     localStorage.removeItem('dashStep');
@@ -531,49 +595,6 @@ const DashboardPage = () => {
 
   const goNext = () => setStep(s => Math.min(4, s + 1));
   const goBack = () => setStep(s => Math.max(1, s - 1));
-
-  /* Reiniciar flujo:
-     - Limpia imágenes/inputs/vistas previas y contadores
-     - Rota sesionId para evitar que el PDF use archivos subidos en el flujo anterior
-  */
-  const resetFlow = (skipRotate = false) => {
-    // Limpieza de archivos/URLs
-    try {
-      if (evidenciaRef.current) evidenciaRef.current.value = '';
-      if (pdfRef.current) pdfRef.current.value = '';
-      if (imgsRef.current) imgsRef.current.value = '';
-      if (evidPreviewUrl) { URL.revokeObjectURL(evidPreviewUrl); }
-      if (pdfPreviewUrl) { URL.revokeObjectURL(pdfPreviewUrl); }
-      if (imgPreviewUrl) { URL.revokeObjectURL(imgPreviewUrl); }
-    } catch {}
-    setImagen(null);
-    setActa(null);
-    setActaImgs([]);
-    setEvidPreviewUrl(null);
-    setPdfPreviewUrl(null);
-    setImgPreviewUrl(null);
-
-    // Estado de flujo
-    setStep(1);
-    setCntPrevias(0);
-    setCntPosteriores(0);
-    setActaOK(false);
-    setGenLoading(false);
-    setGenUrl('');
-    setGenErr('');
-    setTipo('previa');
-    setObservacion('');
-
-    // Opcional: mantener la tienda o no. Aquí la dejamos como está.
-    // Si quisieras limpiarla también: setSelectedTienda('');
-
-    // Rotar sesión para aislar evidencias ya subidas
-    if (!skipRotate) {
-      const next = newSessionId();
-      setSesionId(next);
-      localStorage.setItem('sesionId', next);
-    }
-  };
 
   return (
     <div className="dash-root">
