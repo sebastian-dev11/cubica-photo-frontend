@@ -191,7 +191,7 @@ const DashboardPage = () => {
   // sesionId como estado (para poder rotarlo al reiniciar flujo)
   const [sesionId, setSesionId] = useState(() => localStorage.getItem('sesionId') || '');
   const nombreTecnico = localStorage.getItem('nombreTecnico') || 'Técnico';
-  const [isAdmin] = useState(() => localStorage.getItem('isAdmin') === '1');
+  const isAdmin = (sesionId || '').toLowerCase() === 'admin';
 
   const [imagen, setImagen] = useState(null);
   const [tipo, setTipo] = useState('previa');
