@@ -1,4 +1,3 @@
-// DashboardPage.jsx
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
@@ -192,7 +191,7 @@ const DashboardPage = () => {
   // sesionId como estado (para poder rotarlo al reiniciar flujo)
   const [sesionId, setSesionId] = useState(() => localStorage.getItem('sesionId') || '');
   const nombreTecnico = localStorage.getItem('nombreTecnico') || 'Técnico';
-  const isAdmin = (sesionId || '').toLowerCase() === 'admin';
+  const [isAdmin] = useState(() => localStorage.getItem('isAdmin') === '1');
 
   const [imagen, setImagen] = useState(null);
   const [tipo, setTipo] = useState('previa');
