@@ -9,6 +9,117 @@ import axios from 'axios';
 const API_BASE = 'https://cubica-photo-app.onrender.com';
 
 /* =============================
+   Utilidades de optimización de imágenes (sin librerías)
+   - optimizeImage: reescala y recomprime a JPEG
+   - loadImageBitmap / loadHTMLImageElement: carga robusta con fallback
+   - drawToCanvas: pinto manteniendo proporción
+   - blobToFile: reconstruyo File a partir de Blob
+============================= */
+
+// Carga de imagen (prefiere createImageBitmap para performance)
+async function loadImageBitmap(file) {
+  if ('createImageBitmap' in window) {
+    try {
+      const bmp = await createImageBitmap(file);
+      return { width: bmp.width, height: bmp.height, source: bmp, isBitmap: true };
+    } catch {}
+  }
+  return await loadHTMLImageElement(file);
+}
+
+function readAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(fr.result);
+    fr.onerror = reject;
+    fr.readAsDataURL(file);
+  });
+}
+
+async function loadHTMLImageElement(file) {
+  const src = await readAsDataURL(file);
+  await new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => res();
+    img.onerror = rej;
+    img.src = src;
+  });
+  // Volvemos a crear para tener referencia
+  const img2 = new Image();
+  img2.src = src;
+  await img2.decode?.();
+  return { width: img2.naturalWidth || img2.width, height: img2.naturalHeight || img2.height, source: img2, isBitmap: false };
+}
+
+function drawToCanvas(source, sw, sh, maxW) {
+  const ratio = Math.min(1, maxW / Math.max(sw, sh));
+  const outW = Math.max(1, Math.round(sw * ratio));
+  const outH = Math.max(1, Math.round(sh * ratio));
+
+  const canvas = document.createElement('canvas');
+  canvas.width = outW;
+  canvas.height = outH;
+  const ctx = canvas.getContext('2d', { alpha: false });
+
+  // Imagen nítida sin suavizado exagerado
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(source, 0, 0, outW, outH);
+  return canvas;
+}
+
+function blobToFile(blob, name, type) {
+  // File constructor es soportado ampliamente en navegadores modernos
+  try { return new File([blob], name, { type }); } catch {
+    blob.name = name;
+    blob.type = type;
+    return blob;
+  }
+}
+
+async function optimizeImage(file, {
+  maxWidth = 1600,
+  quality = 0.75,
+  format = 'image/jpeg',
+  fallbacks = [{ maxWidth: 1280, quality: 0.7 }]
+} = {}) {
+  // Validación de tipo
+  if (!file || !file.type?.startsWith('image/')) return file;
+
+  // Cargamos fuente
+  const { width, height, source, isBitmap } = await loadImageBitmap(file);
+
+  // Si ya es razonable y menor a 10MB, igualmente normalizamos a JPEG para consistencia de peso
+  let canvas = drawToCanvas(source, width, height, maxWidth);
+  if (isBitmap && source.close) {
+    try { source.close(); } catch {}
+  }
+
+  // Intento principal
+  let outBlob = await new Promise((res, rej) => canvas.toBlob(b => b ? res(b) : rej(new Error('toBlob null')), format, quality));
+  // Si sigue demasiado grande, aplicar fallbacks
+  for (const fb of fallbacks) {
+    if (outBlob.size <= 10 * 1024 * 1024) break;
+    canvas = drawToCanvas(canvas, canvas.width, canvas.height, fb.maxWidth);
+    outBlob = await new Promise((res, rej) => canvas.toBlob(b => b ? res(b) : rej(new Error('toBlob null')), format, fb.quality));
+  }
+
+  // Nombre derivado
+  const base = (file.name || 'image').replace(/\.[a-z0-9]+$/i, '');
+  const outName = `${base}-opt.jpg`;
+
+  return blobToFile(outBlob, outName, 'image/jpeg');
+}
+
+async function optimizeMany(files, opts) {
+  const arr = Array.from(files || []);
+  const out = [];
+  for (const f of arr) {
+    try { out.push(await optimizeImage(f, opts)); } catch { out.push(f); }
+  }
+  return out;
+}
+
+/* =============================
    GlassSelect (JSX/JS puro)
 ============================= */
 const GlassSelect = ({ value, onChange, options, placeholder = 'Selecciona…', disabled = false, ariaLabel }) => {
@@ -378,7 +489,38 @@ const DashboardPage = () => {
     if (imgPreviewUrl) { URL.revokeObjectURL(imgPreviewUrl); setImgPreviewUrl(null); }
   };
 
-  /* Subidas */
+  /* =============================
+     Subidas
+     - Evidencia: optimización AL SELECCIONAR (previsualizas la optimizada)
+     - Acta (imágenes): optimización justo ANTES de subir en handleSubirActa
+  ============================== */
+
+  // Maneja selección de evidencia y comprime antes de setear en estado
+  const onSelectEvidencia = async (e) => {
+    const file = e.target.files && e.target.files[0] ? e.target.files[0] : null;
+    if (!file) { setImagen(null); return; }
+    if (!file.type?.startsWith('image/')) {
+      setMensaje('El archivo seleccionado no es una imagen');
+      setImagen(null);
+      return;
+    }
+    try {
+      setMensaje('Optimizando imagen…');
+      const optimized = await optimizeImage(file, {
+        maxWidth: 1600,
+        quality: 0.75,
+        format: 'image/jpeg',
+        fallbacks: [{ maxWidth: 1280, quality: 0.7 }]
+      });
+      setImagen(optimized);
+      setMensaje('');
+    } catch (err) {
+      console.error(err);
+      setMensaje('No se pudo optimizar la imagen. Se intentará subir el archivo original.');
+      setImagen(file);
+    }
+  };
+
   const handleSubirImagen = async (e) => {
     e.preventDefault();
     if (!imagen || !tipo || !selectedTienda) { setMensaje('Por favor completa todos los campos.'); return; }
@@ -419,7 +561,23 @@ const DashboardPage = () => {
     const formData = new FormData();
     formData.append('sesionId', sesionId);
     if (acta) formData.append('acta', acta);
-    actaImgs.forEach(img => formData.append('imagenes', img));
+
+    // Optimización SOLO para imágenes del acta en el momento de subir
+    let imgsParaSubir = actaImgs;
+    if (actaImgs.length > 0) {
+      try {
+        setMensajeActa('Optimizando imágenes del acta…');
+        imgsParaSubir = await optimizeMany(actaImgs, {
+          maxWidth: 1600,
+          quality: 0.75,
+          format: 'image/jpeg',
+          fallbacks: [{ maxWidth: 1280, quality: 0.7 }]
+        });
+      } catch (err) {
+        console.error('Fallo optimizando imágenes del acta:', err);
+      }
+    }
+    imgsParaSubir.forEach(img => formData.append('imagenes', img));
 
     setCargandoActa(true);
     try {
@@ -496,9 +654,6 @@ const DashboardPage = () => {
     setTipo('previa');
     setObservacion('');
 
-    // Mantener tienda seleccionada; si deseas limpiarla, descomenta la siguiente línea:
-    // setSelectedTienda('');
-
     if (!skipRotate) {
       const next = newSessionId();
       setSesionId(next);
@@ -522,7 +677,7 @@ const DashboardPage = () => {
         console.error('Fallo barrido backend en compartir:', e);
       }
       try {
-        await resetFlow(true); // true = no rotar (vamos a salir)
+        await resetFlow(true);
         localStorage.removeItem('sesionId');
         localStorage.removeItem('nombreTecnico');
         localStorage.removeItem('dashStep');
@@ -762,7 +917,8 @@ const DashboardPage = () => {
                 accept="image/*"
                 style={{ display: 'none' }}
                 required
-                onChange={(e) => setImagen(e.target.files && e.target.files[0] ? e.target.files[0] : null)}
+                /* Se reemplaza el setImagen directo por compresión previa */
+                onChange={onSelectEvidencia}
               />
 
               {imagen && <div className="hint" style={{ marginTop: 10 }}>Imagen: {imagen.name}</div>}
@@ -1127,13 +1283,13 @@ const DashboardPage = () => {
           background: linear-gradient(180deg, rgba(255,255,255,0.22), rgba(255,255,255,0.10));
           border:1px solid var(--outline);
           backdrop-filter: blur(10px) saturate(120%); -webkit-backdrop-filter: blur(10px) saturate(120%);
-          box-shadow: inset 0 1px 0 rgba(255,255,255,0.35), 0 6px 18px rgba(0,0,0,0.14);
+          box-shadow: inset 0 1px 0 rgba(0,0,0,0.35), 0 6px 18px rgba(0,0,0,0.14);
           color: var(--upload-fg);
         }
         .upload-icon{ opacity:.95; }
 
         .thumb-box-lg{
-          width:128px; height:84px; border-radius:12px; overflow:hidden; position:relative; display:grid; place-items:center;
+          width:128px; height:84px; border-radius:12px; overflow:hidden; posicion:relative; display:grid; place-items:center;
           background: linear-gradient(180deg, rgba(255,255,255,0.18), rgba(255,255,255,0.06)); border:1px solid var(--outline);
           backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
         }

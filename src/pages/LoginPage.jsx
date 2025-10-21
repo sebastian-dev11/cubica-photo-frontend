@@ -127,7 +127,7 @@ const LoginPage = () => {
             className="logo"
             draggable={false}
           />
-          <h1 className="title">Bienvenido a Cubica Photo App</h1>
+          <h1 className="title">Bienvenido a Cubica PDF App</h1>
 
           <form onSubmit={handleSubmit} className="form" noValidate>
             {/* Cédula */}
