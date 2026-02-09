@@ -296,11 +296,12 @@ const DashboardPage = () => {
   /* Paso y estados */
   const [step, setStep] = useState(() => {
     const v = Number(localStorage.getItem('dashStep') || 1);
-    return Number.isFinite(v) && v >= 1 && v <= 4 ? v : 1;
+    return Number.isFinite(v) && v >= 1 && v <= 5 ? v : 1;
   });
 
   // sesionId como estado (para poder rotarlo al reiniciar flujo)
   const [sesionId, setSesionId] = useState(() => localStorage.getItem('sesionId') || '');
+  const [numeroIncidencia, setNumeroIncidencia] = useState(() => localStorage.getItem('numeroIncidencia') || '');
   const nombreTecnico = localStorage.getItem('nombreTecnico') || 'Técnico';
   const isAdmin = (sesionId || '').toLowerCase() === 'admin';
 
@@ -344,6 +345,7 @@ const DashboardPage = () => {
   /* Guardas / navegación */
   useEffect(() => { if (!sesionId) navigate('/'); }, [navigate, sesionId]);
   useEffect(() => { localStorage.setItem('dashStep', String(step)); }, [step]);
+  useEffect(() => { localStorage.setItem('numeroIncidencia', numeroIncidencia || ''); }, [numeroIncidencia]);
 
   /* Montaje: asegurar estado limpio (por si venía de otra ruta) */
   useEffect(() => {
@@ -351,7 +353,11 @@ const DashboardPage = () => {
     if (imgsRef.current) imgsRef.current.value = '';
     if (evidenciaRef.current) evidenciaRef.current.value = '';
     if (pdfPreviewUrl) { URL.revokeObjectURL(pdfPreviewUrl); setPdfPreviewUrl(null); }
-    if (imgPreviewUrl) { URL.revokeObjectURL(imgPreviewUrl); setImgPreviewUrl(null); }
+    if (imgPreviewUrl) { URL.revokeObjectURL(imgPreviewUrl); setImgPreviewUrl(null);
+
+    setNumeroIncidencia('');
+    localStorage.removeItem('numeroIncidencia');
+    setSelectedTienda(''); }
     if (evidPreviewUrl) { URL.revokeObjectURL(evidPreviewUrl); setEvidPreviewUrl(null); }
     setImagen(null);
     setActa(null);
@@ -600,12 +606,14 @@ const DashboardPage = () => {
 
   /* Generar PDF */
   const handleGenerarPDF = async () => {
+    if (!numeroIncidencia || !String(numeroIncidencia).trim()) { window.alert('Ingresa la incidencia antes de generar el PDF.'); return; }
     if (!selectedTienda) { window.alert('Selecciona una tienda antes de generar el PDF.'); return; }
     if (cntPrevias < 1 || cntPosteriores < 1) { window.alert('Debes subir al menos 1 imagen PREVIA y 1 POSTERIOR para generar el informe.'); return; }
 
     setGenErr(''); setGenUrl(''); setGenLoading(true);
     try {
-      const jsonUrl = `${API_BASE}/pdf/generar/${sesionId}?tiendaId=${selectedTienda}&format=json`;
+      const inc = encodeURIComponent(String(numeroIncidencia).trim());
+      const jsonUrl = `${API_BASE}/pdf/generar/${sesionId}?tiendaId=${selectedTienda}&format=json&numeroIncidencia=${inc}`;
       const res = await fetch(jsonUrl, { headers: { Accept: 'application/json' } });
       if (!res.ok) throw new Error('No se pudo obtener el enlace del informe');
       const data = await res.json();
@@ -681,6 +689,7 @@ const DashboardPage = () => {
         localStorage.removeItem('sesionId');
         localStorage.removeItem('nombreTecnico');
         localStorage.removeItem('dashStep');
+        localStorage.removeItem('numeroIncidencia');
       } catch {}
     };
 
@@ -719,6 +728,7 @@ const DashboardPage = () => {
     localStorage.removeItem('sesionId');
     localStorage.removeItem('nombreTecnico');
     localStorage.removeItem('dashStep');
+        localStorage.removeItem('numeroIncidencia');
     setSesionId('');
 
     navigate('/');
@@ -735,19 +745,20 @@ const DashboardPage = () => {
   const pickEvid = () => evidenciaRef.current && evidenciaRef.current.click();
 
   const onSelectTienda = (val) => {
-    if (step > 1) return;
+    if (step > 2) return;
     setSelectedTienda(val);
     setCntPrevias(0);
     setCntPosteriores(0);
     setActaOK(false);
   };
 
-  const canNextFrom1 = !!selectedTienda;
+  const canNextFrom1 = !!(numeroIncidencia && String(numeroIncidencia).trim().length > 0);
+  const canNextFrom2 = !!selectedTienda;
   const hasAnyEvidence = (cntPrevias + cntPosteriores) > 0;
-  const canNextFrom2 = hasAnyEvidence;
-  const canNextFrom3 = actaOK;
+  const canNextFrom3 = hasAnyEvidence;
+  const canNextFrom4 = actaOK;
 
-  const goNext = () => setStep(s => Math.min(4, s + 1));
+  const goNext = () => setStep(s => Math.min(5, s + 1));
   const goBack = () => setStep(s => Math.max(1, s - 1));
 
   return (
@@ -766,10 +777,11 @@ const DashboardPage = () => {
 
           <div className="stepper card">
             <div className="steps" role="tablist" aria-label="Progreso">
-              <div className={`step ${step >= 1 ? 'done' : ''} ${step === 1 ? 'current' : ''}`} role="tab" aria-selected={step===1}><span>1</span> Ubicación</div>
-              <div className={`step ${step >= 2 ? 'done' : ''} ${step === 2 ? 'current' : ''}`} role="tab" aria-selected={step===2}><span>2</span> Evidencias</div>
-              <div className={`step ${step >= 3 ? 'done' : ''} ${step === 3 ? 'current' : ''}`} role="tab" aria-selected={step===3}><span>3</span> Acta</div>
-              <div className={`step ${step >= 4 ? 'done' : ''} ${step === 4 ? 'current' : ''}`} role="tab" aria-selected={step===4}><span>4</span> PDF</div>
+              <div className={`step ${step >= 1 ? 'done' : ''} ${step === 1 ? 'current' : ''}`} role="tab" aria-selected={step===1}><span>1</span> Incidencia</div>
+              <div className={`step ${step >= 2 ? 'done' : ''} ${step === 2 ? 'current' : ''}`} role="tab" aria-selected={step===2}><span>2</span> Ubicación</div>
+              <div className={`step ${step >= 3 ? 'done' : ''} ${step === 3 ? 'current' : ''}`} role="tab" aria-selected={step===3}><span>3</span> Evidencias</div>
+              <div className={`step ${step >= 4 ? 'done' : ''} ${step === 4 ? 'current' : ''}`} role="tab" aria-selected={step===4}><span>4</span> Acta</div>
+              <div className={`step ${step >= 5 ? 'done' : ''} ${step === 5 ? 'current' : ''}`} role="tab" aria-selected={step===5}><span>5</span> PDF</div>
             </div>
 
             <div className="step-quick">
@@ -789,6 +801,47 @@ const DashboardPage = () => {
           </div>
 
           {step === 1 && (
+            <div className="card">
+              <h2 className="subtitle">Incidencia</h2>
+
+              <div className="field">
+                <label className="label"><strong>Número de incidencia</strong></label>
+                <div className="incidencia-row">
+                  <input
+                    className="input"
+                    type="text"
+                    inputMode="text"
+                    autoCapitalize="characters"
+                    autoCorrect="off"
+                    placeholder="Ej: 12345"
+                    value={numeroIncidencia}
+                    onChange={(e) => setNumeroIncidencia(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="btn-outline"
+                    onClick={async () => {
+                      try {
+                        const txt = await navigator.clipboard.readText();
+                        if (txt) setNumeroIncidencia(txt);
+                      } catch {
+                        window.alert('No se pudo leer el portapapeles. Pega manualmente.');
+                      }
+                    }}
+                  >
+                    Pegar
+                  </button>
+                </div>
+              </div>
+
+              <div className="filters-actions">
+                <button className="btn-primary" onClick={goNext} disabled={!canNextFrom1}>Continuar</button>
+              </div>
+            </div>
+          )}
+
+          {step === 2 && (
+
             <div className="card">
               <h2 className="subtitle">Ubicación — Filtros</h2>
 
@@ -863,12 +916,12 @@ const DashboardPage = () => {
               </div>
 
               <div className="wizard-actions">
-                <button className="btn" onClick={() => canNextFrom1 && goNext()} disabled={!canNextFrom1}>Continuar</button>
+                <button className="btn" onClick={() => canNextFrom2 && goNext()} disabled={!canNextFrom2}>Continuar</button>
               </div>
             </div>
           )}
 
-          {step === 2 && (
+          {step === 3 && (
             <form onSubmit={handleSubirImagen} className={`card ${cargando ? 'is-busy' : ''}`}>
               {cargando && <div className="md-progress" aria-hidden="true" />}
               <h2 className="subtitle">Subir Imagen</h2>
@@ -946,12 +999,12 @@ const DashboardPage = () => {
 
               <div className="wizard-actions">
                 <button type="button" className="btn-outline" onClick={goBack}>Regresar</button>
-                <button type="button" className="btn" onClick={() => canNextFrom2 && goNext()} disabled={!canNextFrom2}>Continuar</button>
+                <button type="button" className="btn" onClick={() => canNextFrom3 && goNext()} disabled={!canNextFrom3}>Continuar</button>
               </div>
             </form>
           )}
 
-          {step === 3 && (
+          {step === 4 && (
             <form onSubmit={handleSubirActa} className={`card ${cargandoActa ? 'is-busy' : ''}`}>
               {cargandoActa && <div className="md-progress" aria-hidden="true" />}
               <h2 className="subtitle">Subir Acta</h2>
@@ -1052,17 +1105,18 @@ const DashboardPage = () => {
 
               <div className="wizard-actions">
                 <button type="button" className="btn-outline" onClick={goBack}>Regresar</button>
-                <button type="button" className="btn" onClick={() => canNextFrom3 && goNext()} disabled={!canNextFrom3}>Continuar</button>
+                <button type="button" className="btn" onClick={() => canNextFrom4 && goNext()} disabled={!canNextFrom4}>Continuar</button>
               </div>
             </form>
           )}
 
-          {step === 4 && (
+          {step === 5 && (
             <>
               {!genLoading && !genUrl && !genErr && (
                 <>
                   <div className="card">
                     <h2 className="subtitle">Resumen</h2>
+                    <div className="hint">Incidencia: <strong>{String(numeroIncidencia || '').trim()}</strong></div>
                     <div className="hint">Ubicación: <strong>{filteredTiendas.find(t => t._id === selectedTienda) ? `${filteredTiendas.find(t => t._id === selectedTienda)?.nombre} — ${filteredTiendas.find(t => t._id === selectedTienda)?.departamento}, ${filteredTiendas.find(t => t._id === selectedTienda)?.ciudad}` : 'Sin tienda'}</strong></div>
                     <div className="hint">Evidencias: {animPrev} previas · {animPost} posteriores</div>
                     <div className="hint">Acta: {actaOK ? 'Lista' : 'Pendiente'}</div>
@@ -1145,7 +1199,11 @@ const DashboardPage = () => {
           --focus:rgba(255,242,0,0.35);
           --upload-fg:#111111;
         }
-        @media (prefers-color-scheme: dark){
+        
+        .incidencia-row{ display:flex; gap:10px; align-items:center; }
+        .incidencia-row .input{ flex:1; }
+        .incidencia-row .btn-outline{ white-space:nowrap; padding-inline:14px; }
+@media (prefers-color-scheme: dark){
           :root{ --upload-fg:#ffffff; }
         }
 
@@ -1357,16 +1415,24 @@ const DashboardPage = () => {
           display:flex; gap:10px; justify-content:space-between; align-items:center; margin-top:12px;
         }
 
-        /* Stepper: 4 columnas en desktop, 2x2 en móvil */
+        /* Stepper: mantiene 5 pasos en una fila y permite scroll horizontal en pantallas pequeñas */
         .stepper .steps{
-          display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:8px;
+          display:flex;
+          gap:8px;
+          margin-bottom:8px;
+          overflow-x:auto;
+          padding-bottom:4px;
+          -webkit-overflow-scrolling:touch;
+        }
+        .stepper .steps::-webkit-scrollbar{ height:6px; }
+        .stepper .steps::-webkit-scrollbar-thumb{ background:rgba(255,255,255,0.18); border-radius:999px; }
+
+        .stepper .step{
+          display:flex; flex:0 0 auto; min-width:120px; justify-content:center; align-items:center; gap:8px; padding:8px; border-radius:12px; border:1px solid var(--outline); background:rgba(255,255,255,0.06);
+          font-weight:700; font-size:clamp(12px,3.2vw,14px);
         }
         @media (max-width:560px){
-          .stepper .steps{ grid-template-columns:repeat(2,1fr); }
-        }
-        .stepper .step{
-          display:flex; align-items:center; gap:8px; padding:8px; border-radius:12px; border:1px solid var(--outline); background:rgba(255,255,255,0.06);
-          font-weight:700; font-size:clamp(12px,3.2vw,14px);
+          .stepper .step{ min-width:110px; }
         }
         .stepper .step span{ width:22px; height:22px; display:inline-grid; place-items:center; border-radius:999px; background:rgba(0,0,0,0.15); }
         .stepper .step.current{ outline:2px solid var(--outline); }

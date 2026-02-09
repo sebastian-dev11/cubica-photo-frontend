@@ -53,6 +53,7 @@ const InformesPage = () => {
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [search, setSearch] = useState('');
+  const [incidenciaSearch, setIncidenciaSearch] = useState('');
 
   /* Estado de UI */
   const [loading, setLoading] = useState(false);
@@ -70,7 +71,7 @@ const InformesPage = () => {
     setMensaje('');
     try {
       const res = await axios.get(`${API_BASE}/informes`, {
-        params: { page, limit, search }
+        params: { page, limit, search, incidencia: incidenciaSearch }
       });
       setInformes(res.data.data || []);
       setTotal(res.data.total || 0);
@@ -86,7 +87,7 @@ const InformesPage = () => {
   useEffect(() => {
     fetchInformes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, limit, search]);
+  }, [page, limit, search, incidenciaSearch]);
 
   const handleCerrarSesion = () => {
     localStorage.removeItem('sesionId');
@@ -109,6 +110,19 @@ const InformesPage = () => {
     } catch {
       return '-';
     }
+  };
+
+  const formatIncidencia = (raw) => {
+    const s = (raw || '').toString().trim();
+    if (!s) return '—';
+
+    const upper = s.toUpperCase();
+    if (upper.startsWith('INC-')) return s.slice(4).trim();
+    if (upper.startsWith('INC')) {
+      const rest = s.slice(3).trim();
+      return rest.startsWith('-') ? rest.slice(1).trim() : rest;
+    }
+    return s;
   };
 
   const askDelete = (inf) => {
@@ -186,6 +200,20 @@ const InformesPage = () => {
               </div>
 
               <div className="field">
+                <label className="label">Buscar por incidencia</label>
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="Ej: 12345"
+                  value={incidenciaSearch}
+                  onChange={(e) => { setPage(1); setIncidenciaSearch(e.target.value); }}
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                />
+              </div>
+
+
+              <div className="field">
                 <label className="label">Registros por página</label>
                 <select
                   className="select"
@@ -248,6 +276,7 @@ const InformesPage = () => {
                   <div className="meta">
                     <div><span className="meta-label">Generado por:</span> {inf.generatedBy?.nombre || inf.generatedBy?.usuario || '—'}</div>
                     <div><span className="meta-label">Fecha:</span> {formatFecha(inf.createdAt)}</div>
+                    <div><span className="meta-label">Incidencia:</span> {formatIncidencia(inf.numeroIncidencia)}</div>
                   </div>
 
                   <div className="row-actions">
@@ -351,8 +380,11 @@ const InformesPage = () => {
 
         .subtitle{ margin:0 0 10px 0; font-size:clamp(16px,4vw,20px); font-weight:700; }
 
-        .controls-grid{ display:grid; grid-template-columns:1fr; gap:10px; }
-        @media (min-width:640px){ .controls-grid{ grid-template-columns:1fr 220px 140px; } }
+        .controls-grid{ display:grid; grid-template-columns:1fr; gap:10px; align-items:end; }
+        @media (min-width:640px){ .controls-grid{ grid-template-columns:minmax(320px,2fr) minmax(220px,1fr) 200px 140px; align-items:end; } }
+        .controls-grid .field{ margin-bottom:0; }
+        .controls-grid .label{ min-height:34px; }
+
 
         .field{ margin-bottom:8px; }
         .label{ display:block; font-weight:600; color:var(--label); margin-bottom:6px; }
