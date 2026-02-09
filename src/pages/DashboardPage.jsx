@@ -736,10 +736,10 @@ const DashboardPage = () => {
   };
 
   /* Opciones */
-  const departamentosOptions = useMemo(() => [{ value: '', label: 'Todos' }, ...departamentos.map(d => ({ value: d, label: d }))], [departamentos]);
-  const ciudadesOptions = useMemo(() => [{ value: '', label: 'Todas' }, ...ciudades.map(c => ({ value: c, label: c }))], [ciudades]);
+  //const departamentosOptions = useMemo(() => [{ value: '', label: 'Todos' }, ...departamentos.map(d => ({ value: d, label: d }))], [departamentos]);
+  //const ciudadesOptions = useMemo(() => [{ value: '', label: 'Todas' }, ...ciudades.map(c => ({ value: c, label: c }))], [ciudades]);
   const tiendaOptions = useMemo(() => filteredTiendas.map(t => ({ value: t._id, label: `${t.nombre} — ${t.departamento}, ${t.ciudad}` })), [filteredTiendas]);
-  const tipoOptions = [{ value: 'previa', label: 'Previa' }, { value: 'posterior', label: 'Posterior' }];
+  //const tipoOptions = [{ value: 'previa', label: 'Previa' }, { value: 'posterior', label: 'Posterior' }];
 
   const pickPdf = () => pdfRef.current && pdfRef.current.click();
   const pickImgs = () => imgsRef.current && imgsRef.current.click();
