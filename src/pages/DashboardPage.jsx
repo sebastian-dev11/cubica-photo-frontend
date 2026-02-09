@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/exhaustive-deps */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
@@ -96,12 +95,16 @@ async function optimizeImage(file, {
   }
 
   // Intento principal
-  let outBlob = await new Promise((res, rej) => canvas.toBlob(b => b ? res(b) : rej(new Error('toBlob null')), format, quality));
+  const canvasToBlob = (c, q) => new Promise((res, rej) => {
+    c.toBlob((b) => (b ? res(b) : rej(new Error('toBlob null'))), format, q);
+  });
+
+  let outBlob = await canvasToBlob(canvas, quality);
   // Si sigue demasiado grande, aplicar fallbacks
   for (const fb of fallbacks) {
     if (outBlob.size <= 10 * 1024 * 1024) break;
     canvas = drawToCanvas(canvas, canvas.width, canvas.height, fb.maxWidth);
-    outBlob = await new Promise((res, rej) => canvas.toBlob(b => b ? res(b) : rej(new Error('toBlob null')), format, fb.quality));
+    outBlob = await canvasToBlob(canvas, fb.quality);
   }
 
   // Nombre derivado
@@ -110,6 +113,7 @@ async function optimizeImage(file, {
 
   return blobToFile(outBlob, outName, 'image/jpeg');
 }
+
 
 async function optimizeMany(files, opts) {
   const arr = Array.from(files || []);
@@ -736,10 +740,10 @@ const DashboardPage = () => {
   };
 
   /* Opciones */
-  //const departamentosOptions = useMemo(() => [{ value: '', label: 'Todos' }, ...departamentos.map(d => ({ value: d, label: d }))], [departamentos]);
-  //const ciudadesOptions = useMemo(() => [{ value: '', label: 'Todas' }, ...ciudades.map(c => ({ value: c, label: c }))], [ciudades]);
+  const departamentosOptions = useMemo(() => [{ value: '', label: 'Todos' }, ...departamentos.map(d => ({ value: d, label: d }))], [departamentos]);
+  const ciudadesOptions = useMemo(() => [{ value: '', label: 'Todas' }, ...ciudades.map(c => ({ value: c, label: c }))], [ciudades]);
   const tiendaOptions = useMemo(() => filteredTiendas.map(t => ({ value: t._id, label: `${t.nombre} — ${t.departamento}, ${t.ciudad}` })), [filteredTiendas]);
-  //const tipoOptions = [{ value: 'previa', label: 'Previa' }, { value: 'posterior', label: 'Posterior' }];
+  const tipoOptions = [{ value: 'previa', label: 'Previa' }, { value: 'posterior', label: 'Posterior' }];
 
   const pickPdf = () => pdfRef.current && pdfRef.current.click();
   const pickImgs = () => imgsRef.current && imgsRef.current.click();
@@ -1416,24 +1420,16 @@ const DashboardPage = () => {
           display:flex; gap:10px; justify-content:space-between; align-items:center; margin-top:12px;
         }
 
-        /* Stepper: mantiene 5 pasos en una fila y permite scroll horizontal en pantallas pequeñas */
+        /* Stepper: 4 columnas en desktop, 2x2 en móvil */
         .stepper .steps{
-          display:flex;
-          gap:8px;
-          margin-bottom:8px;
-          overflow-x:auto;
-          padding-bottom:4px;
-          -webkit-overflow-scrolling:touch;
-        }
-        .stepper .steps::-webkit-scrollbar{ height:6px; }
-        .stepper .steps::-webkit-scrollbar-thumb{ background:rgba(255,255,255,0.18); border-radius:999px; }
-
-        .stepper .step{
-          display:flex; flex:0 0 auto; min-width:120px; justify-content:center; align-items:center; gap:8px; padding:8px; border-radius:12px; border:1px solid var(--outline); background:rgba(255,255,255,0.06);
-          font-weight:700; font-size:clamp(12px,3.2vw,14px);
+          display:grid; grid-template-columns:repeat(5,1fr); gap:8px; margin-bottom:8px;
         }
         @media (max-width:560px){
-          .stepper .step{ min-width:110px; }
+          .stepper .steps{ grid-template-columns:repeat(2,1fr); }
+        }
+        .stepper .step{
+          display:flex; align-items:center; gap:8px; padding:8px; border-radius:12px; border:1px solid var(--outline); background:rgba(255,255,255,0.06);
+          font-weight:700; font-size:clamp(12px,3.2vw,14px);
         }
         .stepper .step span{ width:22px; height:22px; display:inline-grid; place-items:center; border-radius:999px; background:rgba(0,0,0,0.15); }
         .stepper .step.current{ outline:2px solid var(--outline); }
