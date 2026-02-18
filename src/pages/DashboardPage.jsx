@@ -343,6 +343,7 @@ const DashboardPage = () => {
 
   const [tiendas, setTiendas] = useState([]);
   const [selectedTienda, setSelectedTienda] = useState('');
+  const [filtroRegional, setFiltroRegional] = useState('');
   const [filtroDepartamento, setFiltroDepartamento] = useState('');
   const [filtroCiudad, setFiltroCiudad] = useState('');
   const [searchText, setSearchText] = useState('');
@@ -389,30 +390,39 @@ const DashboardPage = () => {
   }, []);
 
   /* Derivados */
-  const departamentos = useMemo(() => {
-    const set = new Set(tiendas.map(t => (t?.departamento ?? '').toString().trim()).filter(Boolean));
+  const regionales = useMemo(() => {
+    const set = new Set(tiendas.map(t => (t?.regional ?? '').toString().trim()).filter(Boolean));
     return [...set].sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
   }, [tiendas]);
 
   const ciudades = useMemo(() => {
-    const base = filtroDepartamento ? tiendas.filter(t => (t?.departamento ?? '').trim() === filtroDepartamento) : tiendas;
+    const base = filtroRegional ? tiendas.filter(t => (t?.regional ?? '').trim() === filtroRegional) : tiendas;
     const set = new Set(base.map(t => (t?.ciudad ?? '').toString().trim()).filter(Boolean));
     return [...set].sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
-  }, [tiendas, filtroDepartamento]);
+  }, [tiendas, filtroRegional]);
+
+  const departamentos = useMemo(() => {
+    let base = tiendas;
+    if (filtroRegional) base = base.filter(t => (t?.regional ?? '').trim() === filtroRegional);
+    if (filtroCiudad) base = base.filter(t => (t?.ciudad ?? '').trim() === filtroCiudad);
+    const set = new Set(base.map(t => (t?.departamento ?? '').toString().trim()).filter(Boolean));
+    return [...set].sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
+  }, [tiendas, filtroRegional, filtroCiudad]);
 
   const filteredTiendas = useMemo(() => {
     const q = norm(searchText);
     return tiendas
       .filter(t => {
-        const okDept = filtroDepartamento ? (t?.departamento ?? '').trim() === filtroDepartamento : true;
+        const okReg = filtroRegional ? (t?.regional ?? '').trim() === filtroRegional : true;
         const okCity = filtroCiudad ? (t?.ciudad ?? '').trim() === filtroCiudad : true;
-        if (!(okDept && okCity)) return false;
+        const okDept = filtroDepartamento ? (t?.departamento ?? '').trim() === filtroDepartamento : true;
+        if (!(okReg && okCity && okDept)) return false;
         if (!q) return true;
-        const hay = [t?.nombre, t?.ciudad, t?.departamento].map(norm).some(s => s.includes(q));
+        const hay = [t?.nombre, t?.ciudad, t?.departamento, t?.regional].map(norm).some(s => s.includes(q));
         return hay;
       })
       .sort((a, b) => (a?.nombre || '').localeCompare((b?.nombre || ''), 'es', { sensitivity: 'base' }));
-  }, [tiendas, filtroDepartamento, filtroCiudad, searchText]);
+  }, [tiendas, filtroRegional, filtroCiudad, filtroDepartamento, searchText]);
 
   useEffect(() => {
     if (selectedTienda && !filteredTiendas.some(t => t._id === selectedTienda)) setSelectedTienda('');
@@ -473,7 +483,7 @@ const DashboardPage = () => {
   useEffect(() => { if (cntPosteriores >= 0) { setBumpPost(true); const t = setTimeout(() => setBumpPost(false), 340); return () => clearTimeout(t); } }, [cntPosteriores]);
 
   /* Acciones y limpieza (cliente) */
-  const limpiarFiltros = () => { setFiltroDepartamento(''); setFiltroCiudad(''); setSearchText(''); };
+  const limpiarFiltros = () => { setFiltroRegional(''); setFiltroDepartamento(''); setFiltroCiudad(''); setSearchText(''); setSelectedTienda(''); };
 
   const clearEvid = (e) => {
     e?.stopPropagation?.();
@@ -678,7 +688,7 @@ const DashboardPage = () => {
   const handleShareWhatsApp = () => {
     if (!genUrl) return;
 
-    const tiendaOptsLocal = filteredTiendas.map(t => ({ value: t._id, label: `${t.nombre} — ${t.departamento}, ${t.ciudad}` }));
+    const tiendaOptsLocal = filteredTiendas.map(t => ({ value: t._id, label: `${t.nombre} — ${t.regional ? t.regional + ' | ' : ''}${t.departamento}, ${t.ciudad}` }));
     const tiendaLabel = (tiendaOptsLocal.find(o => o.value === selectedTienda)?.label || '').trim();
     const texto = `Informe técnico${tiendaLabel ? ` - ${tiendaLabel}` : ''}\n${genUrl}`;
     const waUrl = `https://wa.me/?text=${encodeURIComponent(texto)}`;
@@ -727,7 +737,7 @@ const DashboardPage = () => {
     setImagen(null); setActa(null); setActaImgs([]); setActaOK(false);
     setCntPrevias(0); setCntPosteriores(0);
     setGenLoading(false); setGenUrl(''); setGenErr('');
-    setSelectedTienda(''); setSearchText(''); setFiltroDepartamento(''); setFiltroCiudad('');
+    setSelectedTienda(''); setSearchText(''); setFiltroRegional(''); setFiltroDepartamento(''); setFiltroCiudad('');
     setTipo('previa'); setObservacion('');
 
     localStorage.removeItem('sesionId');
@@ -742,7 +752,7 @@ const DashboardPage = () => {
   /* Opciones */
   //const departamentosOptions = useMemo(() => [{ value: '', label: 'Todos' }, ...departamentos.map(d => ({ value: d, label: d }))], [departamentos]);
   //const ciudadesOptions = useMemo(() => [{ value: '', label: 'Todas' }, ...ciudades.map(c => ({ value: c, label: c }))], [ciudades]);
-  const tiendaOptions = useMemo(() => filteredTiendas.map(t => ({ value: t._id, label: `${t.nombre} — ${t.departamento}, ${t.ciudad}` })), [filteredTiendas]);
+  const tiendaOptions = useMemo(() => filteredTiendas.map(t => ({ value: t._id, label: `${t.nombre} — ${t.regional ? t.regional + ' | ' : ''}${t.departamento}, ${t.ciudad}` })), [filteredTiendas]);
   //const tipoOptions = [{ value: 'previa', label: 'Previa' }, { value: 'posterior', label: 'Posterior' }];
 
   const pickPdf = () => pdfRef.current && pdfRef.current.click();
@@ -851,25 +861,36 @@ const DashboardPage = () => {
               <h2 className="subtitle">Ubicación — Filtros</h2>
 
               <div className="filters-grid">
-                <div className="field">
-                  <label className="label">Departamento</label>
+                <div className="field" style={{ gridColumn: '1 / -1' }}>
+                  <label className="label">Regional</label>
                   <GlassSelect
-                    value={filtroDepartamento}
-                    onChange={(val) => { setFiltroDepartamento(val); setFiltroCiudad(''); }}
-                    options={[{ value: '', label: 'Todos' }, ...departamentos.map(d => ({ value: d, label: d }))]}
-                    placeholder="Todos"
-                    ariaLabel="Filtrar por departamento"
+                    value={filtroRegional}
+                    onChange={(val) => { setFiltroRegional(val); setFiltroCiudad(''); setFiltroDepartamento(''); setSelectedTienda(''); }}
+                    options={[{ value: '', label: 'Selecciona Regional' }, ...regionales.map(r => ({ value: r, label: r }))]}
+                    placeholder="Todas las regionales"
+                    ariaLabel="Filtrar por regional"
                   />
                 </div>
                 <div className="field">
                   <label className="label">Ciudad</label>
                   <GlassSelect
                     value={filtroCiudad}
-                    onChange={(val) => setFiltroCiudad(val)}
+                    onChange={(val) => { setFiltroCiudad(val); setFiltroDepartamento(''); setSelectedTienda(''); }}
                     options={[{ value: '', label: 'Todas' }, ...ciudades.map(c => ({ value: c, label: c }))]}
                     placeholder="Todas"
                     ariaLabel="Filtrar por ciudad"
-                    disabled={ciudades.length === 0}
+                    disabled={!filtroRegional || ciudades.length === 0}
+                  />
+                </div>
+                <div className="field">
+                  <label className="label">Departamento</label>
+                  <GlassSelect
+                    value={filtroDepartamento}
+                    onChange={(val) => { setFiltroDepartamento(val); setSelectedTienda(''); }}
+                    options={[{ value: '', label: 'Todos' }, ...departamentos.map(d => ({ value: d, label: d }))]}
+                    placeholder="Todos"
+                    ariaLabel="Filtrar por departamento"
+                    disabled={!filtroCiudad || departamentos.length === 0}
                   />
                 </div>
               </div>
@@ -885,6 +906,7 @@ const DashboardPage = () => {
                   placeholder="Nombre, ciudad o departamento"
                   value={searchText}
                   onChange={(e) => setSearchText(e.target.value)}
+                  disabled={!filtroRegional}
                 />
               </div>
 
@@ -900,14 +922,14 @@ const DashboardPage = () => {
                   >
                     <option value="">{`Selecciona una tienda (${filteredTiendas.length})`}</option>
                     {filteredTiendas.map(t => (
-                      <option key={t._id} value={t._id}>{`${t.nombre} — ${t.departamento}, ${t.ciudad}`}</option>
+                      <option key={t._id} value={t._id}>{`${t.nombre} — ${t.regional ? t.regional + ' | ' : ''}${t.departamento}, ${t.ciudad}`}</option>
                     ))}
                   </select>
                 ) : (
                   <GlassSelect
                     value={selectedTienda}
                     onChange={onSelectTienda}
-                    options={filteredTiendas.map(t => ({ value: t._id, label: `${t.nombre} — ${t.departamento}, ${t.ciudad}` }))}
+                    options={filteredTiendas.map(t => ({ value: t._id, label: `${t.nombre} — ${t.regional ? t.regional + ' | ' : ''}${t.departamento}, ${t.ciudad}` }))}
                     placeholder={`Selecciona una tienda (${filteredTiendas.length})`}
                     ariaLabel="Seleccionar tienda"
                     disabled={filteredTiendas.length === 0}
@@ -932,7 +954,7 @@ const DashboardPage = () => {
               <h2 className="subtitle">Subir Imagen</h2>
 
               <div className="info-row">
-                <div>Tienda: <strong>{filteredTiendas.find(t => t._id === selectedTienda)?.nombre ? `${filteredTiendas.find(t => t._id === selectedTienda)?.nombre} — ${filteredTiendas.find(t => t._id === selectedTienda)?.departamento}, ${filteredTiendas.find(t => t._id === selectedTienda)?.ciudad}` : 'Sin tienda'}</strong></div>
+                <div>Tienda: <strong>{filteredTiendas.find(t => t._id === selectedTienda)?.nombre ? `${filteredTiendas.find(t => t._id === selectedTienda)?.nombre} — ${filteredTiendas.find(t => t._id === selectedTienda)?.regional ? filteredTiendas.find(t => t._id === selectedTienda)?.regional + ' | ' : ''}${filteredTiendas.find(t => t._id === selectedTienda)?.departamento}, ${filteredTiendas.find(t => t._id === selectedTienda)?.ciudad}` : 'Sin tienda'}</strong></div>
                 <div className="counters">
                   <span className={`badge ${bumpPrev ? 'bump' : ''}`}><span className="dot pre" />{animPrev} previas</span>
                   <span className={`badge ${bumpPost ? 'bump' : ''}`}><span className="dot post" />{animPost} posteriores</span>
@@ -1122,7 +1144,7 @@ const DashboardPage = () => {
                   <div className="card">
                     <h2 className="subtitle">Resumen</h2>
                     <div className="hint">Incidencia: <strong>{String(numeroIncidencia || '').trim()}</strong></div>
-                    <div className="hint">Ubicación: <strong>{filteredTiendas.find(t => t._id === selectedTienda) ? `${filteredTiendas.find(t => t._id === selectedTienda)?.nombre} — ${filteredTiendas.find(t => t._id === selectedTienda)?.departamento}, ${filteredTiendas.find(t => t._id === selectedTienda)?.ciudad}` : 'Sin tienda'}</strong></div>
+                    <div className="hint">Ubicación: <strong>{filteredTiendas.find(t => t._id === selectedTienda) ? `${filteredTiendas.find(t => t._id === selectedTienda)?.nombre} — ${filteredTiendas.find(t => t._id === selectedTienda)?.regional ? filteredTiendas.find(t => t._id === selectedTienda)?.regional + ' | ' : ''}${filteredTiendas.find(t => t._id === selectedTienda)?.departamento}, ${filteredTiendas.find(t => t._id === selectedTienda)?.ciudad}` : 'Sin tienda'}</strong></div>
                     <div className="hint">Evidencias: {animPrev} previas · {animPost} posteriores</div>
                     <div className="hint">Acta: {actaOK ? 'Lista' : 'Pendiente'}</div>
                     <div className="wizard-actions">
@@ -1208,7 +1230,7 @@ const DashboardPage = () => {
         .incidencia-row{ display:flex; gap:10px; align-items:center; }
         .incidencia-row .input{ flex:1; }
         .incidencia-row .btn-outline{ white-space:nowrap; padding-inline:14px; }
-@media (prefers-color-scheme: dark){
+        @media (prefers-color-scheme: dark){
           :root{ --upload-fg:#ffffff; }
         }
 
@@ -1227,6 +1249,7 @@ const DashboardPage = () => {
           width:min(100%,960px); padding:10px 12px; border-radius:14px; background:rgba(255,255,255,0.06);
           border:1px solid var(--outline); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
           box-shadow:0 8px 24px rgba(0,0,0,0.18);
+          z-index: 100;
         }
         .hello{ font-weight:600; }
         .actions{ display:flex; gap:8px; flex-wrap:wrap; }
