@@ -48,12 +48,14 @@ const InformesPage = () => {
 
   /* Estado de datos y filtros */
   const [informes, setInformes] = useState([]);
+  const [regionales, setRegionales] = useState([]);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [search, setSearch] = useState('');
   const [incidenciaSearch, setIncidenciaSearch] = useState('');
+  const [regionalSearch, setRegionalSearch] = useState('');
 
   /* Estado de UI */
   const [loading, setLoading] = useState(false);
@@ -66,12 +68,31 @@ const InformesPage = () => {
 
   const nombreTecnico = localStorage.getItem('nombreTecnico') || 'Técnico';
 
+  /* Cargar lista de regionales para el filtro */
+  useEffect(() => {
+    const fetchRegionales = async () => {
+      try {
+        const res = await axios.get(`${API_BASE}/tiendas/regionales`);
+        setRegionales(res.data);
+      } catch (err) {
+        console.error('Error cargando regionales:', err);
+      }
+    };
+    fetchRegionales();
+  }, []);
+
   const fetchInformes = async () => {
     setLoading(true);
     setMensaje('');
     try {
       const res = await axios.get(`${API_BASE}/informes`, {
-        params: { page, limit, search, incidencia: incidenciaSearch }
+        params: { 
+          page, 
+          limit, 
+          search, 
+          incidencia: incidenciaSearch,
+          regional: regionalSearch 
+        }
       });
       setInformes(res.data.data || []);
       setTotal(res.data.total || 0);
@@ -87,7 +108,7 @@ const InformesPage = () => {
   useEffect(() => {
     fetchInformes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, limit, search, incidenciaSearch]);
+  }, [page, limit, search, incidenciaSearch, regionalSearch]);
 
   const handleCerrarSesion = () => {
     localStorage.removeItem('sesionId');
@@ -186,6 +207,7 @@ const InformesPage = () => {
             {loading && <div className="md-progress" aria-hidden="true" />}
             <h2 className="subtitle">Buscar y paginar</h2>
             <div className="controls-grid">
+              
               <div className="field">
                 <label className="label">Buscar por título</label>
                 <input
@@ -200,7 +222,7 @@ const InformesPage = () => {
               </div>
 
               <div className="field">
-                <label className="label">Buscar por incidencia</label>
+                <label className="label">Por incidencia</label>
                 <input
                   type="text"
                   className="input"
@@ -212,25 +234,38 @@ const InformesPage = () => {
                 />
               </div>
 
+              <div className="field">
+                <label className="label">Por regional</label>
+                <select
+                  className="select"
+                  value={regionalSearch}
+                  onChange={(e) => { setPage(1); setRegionalSearch(e.target.value); }}
+                >
+                  <option value="">Todas</option>
+                  {regionales.map(r => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+              </div>
 
               <div className="field">
-                <label className="label">Registros por página</label>
+                <label className="label">Registros</label>
                 <select
                   className="select"
                   value={limit}
                   onChange={(e) => { setPage(1); setLimit(parseInt(e.target.value, 10)); }}
                 >
-                  <option value={5}>5 por página</option>
-                  <option value={10}>10 por página</option>
-                  <option value={20}>20 por página</option>
-                  <option value={50}>50 por página</option>
+                  <option value={5}>5 por pág</option>
+                  <option value={10}>10 por pág</option>
+                  <option value={20}>20 por pág</option>
+                  <option value={50}>50 por pág</option>
                 </select>
               </div>
 
               <div className="field">
                 <label className="label">&nbsp;</label>
-                <button className="btn-outline" onClick={fetchInformes} disabled={loading}>
-                  {loading ? 'Cargando…' : 'Actualizar'}
+                <button className="btn-outline" onClick={fetchInformes} disabled={loading} style={{ width: '100%' }}>
+                  {loading ? '...' : 'Actualizar'}
                 </button>
               </div>
             </div>
@@ -325,7 +360,7 @@ const InformesPage = () => {
         loading={deleting}
       />
 
-      {/* Estilos unificados con el patrón material de Login/Dashboard */}
+      {/* Estilos */}
       <style>{`
         *, *::before, *::after { box-sizing: border-box; }
         html, body, #root { height: 100%; }
@@ -358,6 +393,7 @@ const InformesPage = () => {
           width:min(100%,960px); padding:10px 12px; border-radius:14px; background:rgba(255,255,255,0.06);
           border:1px solid var(--outline); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
           box-shadow:0 8px 24px rgba(0,0,0,0.18);
+          z-index: 100;
         }
         .hello{ font-weight:600; }
         .actions{ display:flex; gap:8px; flex-wrap:wrap; }
@@ -381,13 +417,12 @@ const InformesPage = () => {
         .subtitle{ margin:0 0 10px 0; font-size:clamp(16px,4vw,20px); font-weight:700; }
 
         .controls-grid{ display:grid; grid-template-columns:1fr; gap:10px; align-items:end; }
-        @media (min-width:640px){ .controls-grid{ grid-template-columns:minmax(320px,2fr) minmax(220px,1fr) 200px 140px; align-items:end; } }
+        @media (min-width:800px){ .controls-grid{ grid-template-columns:minmax(200px,2fr) minmax(130px,1fr) minmax(130px,1fr) 130px 100px; align-items:end; } }
         .controls-grid .field{ margin-bottom:0; }
         .controls-grid .label{ min-height:34px; }
 
-
         .field{ margin-bottom:8px; }
-        .label{ display:block; font-weight:600; color:var(--label); margin-bottom:6px; }
+        .label{ display:block; font-weight:600; color:var(--label); margin-bottom:6px; font-size: 0.9rem; }
 
         .input, .select{
           width:100%; border-radius:12px; border:1px solid var(--outline); background:transparent; color:var(--on-surface);
@@ -395,6 +430,14 @@ const InformesPage = () => {
           height:48px; padding:10px 12px;
         }
         .select{ appearance:none; }
+        /* Añadir icono flecha al select para que se vea nativo bonito */
+        .select {
+          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23e9eaec'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+          background-repeat: no-repeat;
+          background-position: right 12px center;
+          background-size: 16px;
+          padding-right: 36px;
+        }
 
         .input:focus, .select:focus{ box-shadow:0 0 0 4px var(--focus); border-color:var(--outline-strong); }
 
