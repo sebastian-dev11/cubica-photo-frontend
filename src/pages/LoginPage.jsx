@@ -619,14 +619,15 @@ const LoginPage = () => {
 
         @media (max-width: 860px) {
           .login-root {
-            align-items: flex-start;
-            justify-content: flex-start;
+            align-items: center;
+            justify-content: center;
             padding: 24px 16px;
           }
 
           .login-shell {
             grid-template-columns: 1fr;
             width: 100%;
+            align-items: center;
           }
 
           .intro-panel {

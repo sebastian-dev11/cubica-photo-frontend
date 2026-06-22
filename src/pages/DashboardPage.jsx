@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { http } from '../services/http';
+import { APP_VERSION, VERSION_NOTES, VERSION_STORAGE_KEY } from '../config/versionNotes';
 
 async function loadImageBitmap(file) {
   if ('createImageBitmap' in window) {
@@ -478,12 +479,21 @@ const DashboardPage = () => {
   const [filtroCiudad, setFiltroCiudad] = useState('');
   const [searchText, setSearchText] = useState('');
   const [tiendaSuggestOpen, setTiendaSuggestOpen] = useState(false);
+  const [showVersionNotes, setShowVersionNotes] = useState(false);
 
   useEffect(() => {
     if (!token || !sesionId) {
       navigate('/');
     }
   }, [navigate, token, sesionId]);
+
+  useEffect(() => {
+    const versionVista = localStorage.getItem(VERSION_STORAGE_KEY);
+
+    if (versionVista !== APP_VERSION) {
+      setShowVersionNotes(true);
+    }
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('dashStep', String(step));
@@ -1079,6 +1089,11 @@ const DashboardPage = () => {
     }
   };
 
+  const cerrarVersionNotes = () => {
+    localStorage.setItem(VERSION_STORAGE_KEY, APP_VERSION);
+    setShowVersionNotes(false);
+  };
+
   const handleCerrarSesion = async () => {
     try {
       await serverResetSession(sesionId);
@@ -1638,6 +1653,27 @@ const DashboardPage = () => {
         <button type="button" className="floating-start" onClick={() => setStep(1)}>
           Volver al inicio
         </button>
+      )}
+
+      {showVersionNotes && createPortal(
+        <div className="version-modal-backdrop" role="presentation">
+          <div className="version-modal" role="dialog" aria-modal="true" aria-labelledby="version-notes-title">
+            <div className="version-pill">Version {VERSION_NOTES.version}</div>
+            <h3 id="version-notes-title">{VERSION_NOTES.title}</h3>
+            <p>{VERSION_NOTES.subtitle}</p>
+
+            <ul className="version-list">
+              {VERSION_NOTES.items.map((item, index) => (
+                <li key={`${VERSION_NOTES.version}-${index}`}>{item}</li>
+              ))}
+            </ul>
+
+            <button type="button" className="btn primary version-action" onClick={cerrarVersionNotes}>
+              Entendido
+            </button>
+          </div>
+        </div>,
+        document.body
       )}
 
       <style>{`
@@ -2382,6 +2418,93 @@ const DashboardPage = () => {
           font-size: 11px;
           color: #fff200;
           font-weight: 900;
+        }
+
+        .version-modal-backdrop {
+          position: fixed;
+          inset: 0;
+          z-index: 10000;
+          padding: 18px;
+          background: rgba(0, 0, 0, 0.72);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          backdrop-filter: blur(10px);
+        }
+
+        .version-modal {
+          width: min(100%, 520px);
+          max-height: min(88vh, 720px);
+          overflow: auto;
+          border-radius: 26px;
+          padding: 24px;
+          background: rgba(22, 24, 29, 0.98);
+          border: 1px solid rgba(255, 255, 255, 0.14);
+          box-shadow: 0 28px 90px rgba(0, 0, 0, 0.52);
+          color: #f4f4f5;
+        }
+
+        .version-pill {
+          display: inline-flex;
+          align-items: center;
+          min-height: 30px;
+          padding: 0 12px;
+          border-radius: 999px;
+          background: rgba(255, 242, 0, 0.13);
+          border: 1px solid rgba(255, 242, 0, 0.24);
+          color: #fff200;
+          font-size: 12px;
+          font-weight: 900;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+          margin-bottom: 14px;
+        }
+
+        .version-modal h3 {
+          margin: 0;
+          font-size: clamp(24px, 4vw, 34px);
+          letter-spacing: -0.04em;
+        }
+
+        .version-modal p {
+          margin: 8px 0 18px;
+          color: #c5c8ce;
+          line-height: 1.45;
+        }
+
+        .version-list {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+          display: grid;
+          gap: 10px;
+        }
+
+        .version-list li {
+          position: relative;
+          padding: 12px 12px 12px 36px;
+          border-radius: 16px;
+          background: rgba(255, 255, 255, 0.07);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          color: #f4f4f5;
+          line-height: 1.38;
+        }
+
+        .version-list li::before {
+          content: '';
+          position: absolute;
+          left: 14px;
+          top: 17px;
+          width: 9px;
+          height: 9px;
+          border-radius: 50%;
+          background: #fff200;
+          box-shadow: 0 0 18px rgba(255, 242, 0, 0.45);
+        }
+
+        .version-action {
+          width: 100%;
+          margin-top: 18px;
         }
 
         @keyframes enter {
