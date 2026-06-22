@@ -109,7 +109,7 @@ function TiendasPage() {
     }
 
     cargarTiendas();
-  }, []);
+  }, [isAdmin, navigate, token]);
 
   async function cargarTiendas() {
     try {
