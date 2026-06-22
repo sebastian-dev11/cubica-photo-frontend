@@ -1335,6 +1335,186 @@ const InformesPage = () => {
             width: fit-content;
           }
         }
+
+
+        @media (hover: none) and (pointer: coarse) {
+          .btn,
+          input,
+          select {
+            min-height: 54px;
+          }
+
+          .btn:hover:not(:disabled) {
+            transform: none;
+          }
+        }
+
+        @media (max-width: 640px) {
+          .page-root {
+            padding: max(8px, env(safe-area-inset-top, 0px)) 8px max(18px, env(safe-area-inset-bottom, 0px));
+          }
+
+          .topbar {
+            top: max(6px, env(safe-area-inset-top, 0px));
+            margin-bottom: 10px;
+            padding: 10px;
+            gap: 10px;
+          }
+
+          .topbar h1 {
+            font-size: clamp(24px, 9vw, 34px);
+          }
+
+          .topbar p {
+            font-size: 13px;
+          }
+
+          .container {
+            padding-top: 2px;
+          }
+
+          .hero {
+            gap: 10px;
+            margin-bottom: 10px;
+          }
+
+          .hero > div:first-child,
+          .hero-stat {
+            padding: 18px;
+            border-radius: 22px;
+          }
+
+          .eyebrow {
+            margin-bottom: 10px;
+            padding: 7px 10px;
+            font-size: 11px;
+          }
+
+          .hero h2 {
+            font-size: clamp(28px, 10vw, 38px);
+          }
+
+          .hero p {
+            font-size: 14px;
+          }
+
+          .hero-stat strong {
+            font-size: 34px;
+          }
+
+          .card {
+            border-radius: 22px;
+            padding: 16px;
+          }
+
+          .filters-card {
+            margin-bottom: 10px;
+          }
+
+          .section-heading {
+            margin-bottom: 12px;
+          }
+
+          .section-heading h3 {
+            font-size: 24px;
+          }
+
+          .section-heading p {
+            font-size: 14px;
+          }
+
+          .field {
+            margin-bottom: 10px;
+          }
+
+          .field label {
+            font-size: 12px;
+          }
+
+          input,
+          select {
+            min-height: 54px;
+            border-radius: 15px;
+            font-size: 16px;
+          }
+
+          .list {
+            gap: 10px;
+          }
+
+          .item {
+            gap: 12px;
+          }
+
+          .item-header h3 {
+            font-size: 21px;
+          }
+
+          .item-header p {
+            font-size: 13px;
+          }
+
+          .meta-grid div {
+            padding: 12px;
+            border-radius: 16px;
+          }
+
+          .row-actions,
+          .filter-actions,
+          .pager-buttons,
+          .top-actions {
+            gap: 8px;
+          }
+
+          .btn {
+            min-height: 54px;
+            border-radius: 15px;
+            padding: 0 14px;
+          }
+
+          .pager {
+            margin-top: 10px;
+          }
+
+          .modal-overlay {
+            align-items: flex-end;
+            padding: 8px;
+          }
+
+          .modal-panel {
+            width: 100%;
+            max-height: calc(100dvh - 16px);
+            border-radius: 24px;
+            padding: 18px;
+          }
+        }
+
+        @media (max-width: 360px) {
+          .page-root {
+            padding-left: 6px;
+            padding-right: 6px;
+          }
+
+          .card,
+          .hero > div:first-child,
+          .hero-stat,
+          .topbar,
+          .modal-panel {
+            border-radius: 20px;
+          }
+
+          .hero > div:first-child,
+          .hero-stat,
+          .card,
+          .modal-panel {
+            padding: 14px;
+          }
+
+          .btn {
+            font-size: 13px;
+          }
+        }
+
       `}</style>
     </div>
   );

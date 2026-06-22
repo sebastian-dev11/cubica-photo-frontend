@@ -909,6 +909,214 @@ const UsuariosPage = () => {
             grid-template-columns: 1fr;
           }
         }
+
+
+        @media (max-width: 900px) {
+          .topbar,
+          .container {
+            width: min(100% - 24px, 980px);
+          }
+
+          .topbar {
+            align-items: stretch;
+            padding: 18px 0 12px;
+          }
+
+          .top-actions {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            width: 100%;
+          }
+
+          .top-actions .btn {
+            width: 100%;
+            padding: 0 10px;
+            font-size: 13px;
+          }
+
+          .hero {
+            align-items: stretch;
+            padding: 20px;
+          }
+
+          .hero .btn {
+            width: 100%;
+          }
+        }
+
+        @media (max-width: 560px) {
+          .page-root {
+            background:
+              radial-gradient(circle at top left, rgba(255, 242, 0, 0.16), transparent 34%),
+              linear-gradient(180deg, #101317 0%, #0b0d10 100%);
+          }
+
+          .topbar,
+          .container {
+            width: min(100% - 20px, 980px);
+          }
+
+          .topbar {
+            gap: 14px;
+          }
+
+          .topbar h1 {
+            font-size: 30px;
+          }
+
+          .topbar p {
+            font-size: 13px;
+          }
+
+          .top-actions {
+            grid-template-columns: 1fr;
+            gap: 8px;
+          }
+
+          .container {
+            padding-bottom: 34px;
+          }
+
+          .hero,
+          .card {
+            border-radius: 20px;
+            padding: 16px;
+          }
+
+          .hero h2 {
+            font-size: 28px;
+            line-height: 1.03;
+          }
+
+          .hero p {
+            font-size: 14px;
+          }
+
+          .toolbar {
+            gap: 8px;
+          }
+
+          .field {
+            margin-bottom: 12px;
+          }
+
+          .field label {
+            font-size: 12px;
+          }
+
+          input,
+          select {
+            min-height: 50px;
+            border-radius: 14px;
+            padding: 13px 14px;
+            font-size: 16px;
+          }
+
+          .btn {
+            width: 100%;
+            min-height: 48px;
+            border-radius: 14px;
+            padding: 0 14px;
+            font-size: 14px;
+          }
+
+          .message {
+            font-size: 14px;
+            line-height: 1.35;
+          }
+
+          .list {
+            gap: 12px;
+          }
+
+          .user-card {
+            gap: 12px;
+          }
+
+          .user-main {
+            gap: 10px;
+          }
+
+          .user-main h3 {
+            font-size: 20px;
+            line-height: 1.12;
+          }
+
+          .user-main p {
+            font-size: 14px;
+            word-break: break-word;
+          }
+
+          .badges {
+            justify-content: flex-start;
+          }
+
+          .badge {
+            min-height: 30px;
+          }
+
+          .meta div {
+            padding: 10px 12px;
+          }
+
+          .meta strong {
+            font-size: 13px;
+          }
+
+          .actions-row {
+            flex-direction: column;
+            gap: 8px;
+          }
+
+          .modal-overlay {
+            align-items: flex-end;
+            padding: 10px;
+          }
+
+          .modal {
+            width: 100%;
+            max-height: min(88vh, 720px);
+            border-radius: 22px 22px 18px 18px;
+            padding: 18px;
+          }
+
+          .modal h3 {
+            font-size: 24px;
+            margin-bottom: 16px;
+          }
+
+          .modal-actions {
+            flex-direction: column-reverse;
+            gap: 8px;
+          }
+
+          .check {
+            align-items: center;
+            padding: 10px 0;
+          }
+        }
+
+        @media (max-width: 380px) {
+          .topbar,
+          .container {
+            width: min(100% - 16px, 980px);
+          }
+
+          .hero,
+          .card,
+          .modal {
+            padding: 14px;
+          }
+
+          .hero h2 {
+            font-size: 25px;
+          }
+
+          .user-main h3 {
+            font-size: 18px;
+          }
+        }
+
       `}</style>
     </div>
   );

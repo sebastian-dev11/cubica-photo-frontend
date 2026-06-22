@@ -259,7 +259,9 @@ const LoginPage = () => {
           min-height: 100vh;
           min-height: 100dvh;
           width: 100%;
-          overflow: hidden;
+          overflow-x: hidden;
+          overflow-y: auto;
+          -webkit-overflow-scrolling: touch;
           background:
             radial-gradient(circle at top left, rgba(255, 242, 0, 0.14), transparent 30%),
             radial-gradient(circle at bottom right, rgba(255, 255, 255, 0.08), transparent 34%),
@@ -269,7 +271,7 @@ const LoginPage = () => {
           display: flex;
           align-items: center;
           justify-content: center;
-          padding: clamp(18px, 4vw, 42px);
+          padding: clamp(16px, 4vw, 42px);
         }
 
         .ambient {
@@ -388,7 +390,9 @@ const LoginPage = () => {
           left: 0;
           right: 0;
           height: 3px;
-          overflow: hidden;
+          overflow-x: hidden;
+          overflow-y: auto;
+          -webkit-overflow-scrolling: touch;
           background: transparent;
         }
 
@@ -476,7 +480,7 @@ const LoginPage = () => {
           color: #f5f5f5;
           border-radius: 16px;
           padding: 0 16px;
-          font-size: 15px;
+          font-size: 16px;
           outline: none;
           transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
         }
@@ -519,7 +523,7 @@ const LoginPage = () => {
           border: 0;
           border-radius: 16px;
           padding: 0 18px;
-          font-size: 15px;
+          font-size: 16px;
           font-weight: 900;
           cursor: pointer;
           color: #111;
@@ -614,8 +618,15 @@ const LoginPage = () => {
         }
 
         @media (max-width: 860px) {
+          .login-root {
+            align-items: flex-start;
+            justify-content: flex-start;
+            padding: 24px 16px;
+          }
+
           .login-shell {
             grid-template-columns: 1fr;
+            width: 100%;
           }
 
           .intro-panel {
@@ -629,12 +640,13 @@ const LoginPage = () => {
           }
         }
 
-        @media (max-width: 420px) {
+        @media (max-width: 520px) {
           .login-root {
-            padding: 14px;
+            padding: 18px 12px;
           }
 
           .login-card {
+            width: 100%;
             border-radius: 24px;
             padding: 22px;
           }
@@ -643,14 +655,61 @@ const LoginPage = () => {
             width: 112px;
             height: 112px;
             border-radius: 24px;
+            margin-bottom: 18px;
           }
 
           .logo {
             width: 90px;
           }
 
+          .login-heading {
+            margin-bottom: 20px;
+          }
+
           .login-heading h2 {
             font-size: 30px;
+          }
+
+          .login-heading p {
+            font-size: 13px;
+          }
+
+          .form {
+            gap: 14px;
+          }
+
+          input,
+          .btn {
+            min-height: 52px;
+          }
+
+          .message {
+            font-size: 13px;
+            text-align: left;
+          }
+        }
+
+        @media (max-width: 360px) {
+          .login-root {
+            padding: 12px 10px;
+          }
+
+          .login-card {
+            padding: 18px;
+            border-radius: 22px;
+          }
+
+          .logo-wrap {
+            width: 96px;
+            height: 96px;
+          }
+
+          .logo {
+            width: 78px;
+          }
+
+          .login-heading h2 {
+            font-size: 28px;
           }
         }
       `}</style>

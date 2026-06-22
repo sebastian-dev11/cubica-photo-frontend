@@ -2492,6 +2492,238 @@ const DashboardPage = () => {
             grid-template-columns: 1fr;
           }
         }
+
+
+        @media (max-width: 640px) {
+          body {
+            overflow-x: hidden;
+          }
+
+          .dash-root {
+            padding-bottom: 92px;
+          }
+
+          .topbar {
+            width: min(100% - 20px, 980px);
+            padding: 16px 0 12px;
+            gap: 12px;
+          }
+
+          .topbar h1 {
+            font-size: 26px;
+            line-height: 1.05;
+          }
+
+          .topbar p {
+            font-size: 13px;
+          }
+
+          .top-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            width: 100%;
+          }
+
+          .top-actions .btn {
+            width: 100%;
+            min-height: 46px;
+            padding: 0 10px;
+            font-size: 13px;
+          }
+
+          .top-actions .btn.danger {
+            grid-column: 1 / -1;
+          }
+
+          .dash-container {
+            width: min(100% - 20px, 980px);
+            padding: 4px 0 28px;
+          }
+
+          .hero {
+            gap: 12px;
+            margin-bottom: 14px;
+          }
+
+          .hero > div:first-child,
+          .session-chip,
+          .card {
+            border-radius: 20px;
+          }
+
+          .hero > div:first-child {
+            padding: 18px;
+          }
+
+          .hero h2 {
+            font-size: 26px;
+            line-height: 1.05;
+          }
+
+          .hero p,
+          .step-card p {
+            font-size: 14px;
+            line-height: 1.45;
+          }
+
+          .session-chip {
+            padding: 14px;
+          }
+
+          .steps {
+            gap: 7px;
+            margin: 14px 0;
+          }
+
+          .step-dot {
+            height: 9px;
+          }
+
+          .step-card {
+            padding: 18px;
+          }
+
+          .step-card h3 {
+            font-size: 24px;
+            line-height: 1.08;
+          }
+
+          .field {
+            margin-bottom: 14px;
+          }
+
+          input,
+          textarea,
+          .select-trigger {
+            min-height: 50px;
+            border-radius: 14px;
+            font-size: 16px;
+          }
+
+          textarea {
+            min-height: 118px;
+          }
+
+          .filters-grid {
+            gap: 10px;
+          }
+
+          .suggestions-panel {
+            max-height: 42vh;
+            border-radius: 16px;
+          }
+
+          .suggestion-item {
+            min-height: 58px;
+            padding: 13px;
+          }
+
+          .selected-store {
+            border-radius: 16px;
+          }
+
+          .actions {
+            margin-top: 18px;
+          }
+
+          .actions.between,
+          .right-actions {
+            gap: 9px;
+          }
+
+          .btn {
+            min-height: 50px;
+            border-radius: 14px;
+            padding: 0 14px;
+            font-size: 14px;
+          }
+
+          .counter-grid {
+            gap: 10px;
+          }
+
+          .counter-box {
+            padding: 14px;
+            border-radius: 18px;
+          }
+
+          .counter-box strong {
+            font-size: 28px;
+          }
+
+          .file-card {
+            min-height: 210px;
+            border-radius: 18px;
+          }
+
+          .file-card.small {
+            min-height: 190px;
+          }
+
+          .file-placeholder {
+            padding: 18px;
+          }
+
+          .file-placeholder strong {
+            font-size: 16px;
+          }
+
+          .file-placeholder span {
+            font-size: 13px;
+          }
+
+          .summary-grid {
+            gap: 10px;
+          }
+
+          .summary-grid > div {
+            border-radius: 16px;
+            padding: 14px;
+          }
+
+          .geo-box,
+          .result-box {
+            border-radius: 16px;
+            padding: 14px;
+          }
+
+          .dropdown-panel {
+            left: 10px !important;
+            right: 10px !important;
+            width: calc(100% - 20px) !important;
+            max-height: 48vh;
+            border-radius: 16px;
+          }
+
+          .option {
+            min-height: 50px;
+          }
+
+          .floating-start {
+            left: 10px;
+            right: 10px;
+            bottom: calc(12px + env(safe-area-inset-bottom));
+            width: calc(100% - 20px);
+            min-height: 52px;
+          }
+        }
+
+        @media (max-width: 360px) {
+          .top-actions {
+            grid-template-columns: 1fr;
+          }
+
+          .top-actions .btn.danger {
+            grid-column: auto;
+          }
+
+          .hero h2,
+          .step-card h3 {
+            font-size: 22px;
+          }
+        }
+
       `}</style>
     </div>
   );

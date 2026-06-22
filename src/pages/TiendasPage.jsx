@@ -876,6 +876,205 @@ function TiendasPage() {
           }
         }
 
+        @media (max-width: 900px) {
+          .topbar {
+            align-items: flex-start;
+          }
+
+          .top-actions {
+            justify-content: flex-end;
+          }
+
+          .hero-card {
+            align-items: flex-start;
+          }
+
+          .store-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        @media (max-width: 780px) {
+          .tiendas-page {
+            padding: 18px 0 calc(34px + env(safe-area-inset-bottom));
+          }
+
+          .topbar,
+          .dash-container {
+            width: min(100% - 24px, 1100px);
+          }
+
+          .topbar {
+            gap: 14px;
+            margin-bottom: 16px;
+          }
+
+          h1 {
+            font-size: clamp(34px, 13vw, 48px);
+            line-height: 0.98;
+          }
+
+          h2 {
+            font-size: clamp(24px, 8vw, 34px);
+          }
+
+          h3 {
+            font-size: 20px;
+          }
+
+          h4 {
+            font-size: 17px;
+          }
+
+          .muted {
+            font-size: 14px;
+          }
+
+          .top-actions {
+            width: 100%;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+          }
+
+          .session-chip {
+            grid-column: 1 / -1;
+            justify-content: center;
+            min-height: 44px;
+          }
+
+          .btn {
+            min-height: 48px;
+            border-radius: 16px;
+            padding: 0 14px;
+            font-size: 14px;
+          }
+
+          .btn.big {
+            width: 100%;
+            min-height: 54px;
+          }
+
+          .hero-card {
+            padding: 20px;
+            gap: 18px;
+            margin-bottom: 14px;
+          }
+
+          .panel-card {
+            padding: 16px;
+          }
+
+          .section-head {
+            gap: 14px;
+            margin-bottom: 14px;
+          }
+
+          input {
+            min-height: 52px;
+            border-radius: 16px;
+            font-size: 16px;
+          }
+
+          .store-card {
+            padding: 16px;
+            border-radius: 20px;
+            gap: 14px;
+          }
+
+          .store-actions {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 10px;
+          }
+
+          .store-actions .btn {
+            width: 100%;
+          }
+
+          .modal-backdrop {
+            align-items: flex-end;
+            padding: 12px;
+          }
+
+          .modal-card {
+            width: 100%;
+            max-height: 88vh;
+            border-radius: 24px 24px 18px 18px;
+            padding: 18px;
+          }
+
+          .modal-card.wide {
+            width: 100%;
+          }
+
+          .modal-head {
+            gap: 12px;
+            margin-bottom: 16px;
+          }
+
+          .icon-btn {
+            flex: 0 0 auto;
+          }
+
+          .form-grid {
+            gap: 12px;
+          }
+
+          .modal-actions {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 10px;
+          }
+
+          .history-card {
+            align-items: stretch;
+            padding: 14px;
+          }
+
+          .history-actions {
+            width: 100%;
+          }
+
+          .history-actions .btn {
+            width: 100%;
+          }
+
+          .alert,
+          .empty-state {
+            border-radius: 18px;
+            padding: 16px;
+            font-size: 14px;
+          }
+        }
+
+        @media (max-width: 520px) {
+          .top-actions {
+            grid-template-columns: 1fr;
+          }
+
+          .hero-card,
+          .panel-card {
+            border-radius: 22px;
+          }
+
+          .store-main {
+            gap: 7px;
+          }
+
+          .store-badge {
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          }
+
+          .modal-card {
+            max-height: 90vh;
+            padding: 16px;
+          }
+        }
+
         @media (max-width: 420px) {
           .topbar,
           .dash-container {
@@ -883,7 +1082,21 @@ function TiendasPage() {
           }
 
           .tiendas-page {
-            padding-top: 18px;
+            padding-top: 16px;
+          }
+
+          .hero-card,
+          .panel-card {
+            padding: 14px;
+          }
+
+          .store-card,
+          .history-card {
+            padding: 14px;
+          }
+
+          .eyebrow {
+            font-size: 11px;
           }
         }
       `}</style>
