@@ -1,4 +1,4 @@
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
+const API_URL = process.env.REACT_APP_API_URL || 'https://cubica-photo-app.onrender.com';
 
 async function parseResponse(response) {
   const text = await response.text();
