@@ -279,10 +279,11 @@ const norm = (s) => String(s || '')
 
 const useAnimatedNumber = (value, duration = 500) => {
   const [display, setDisplay] = useState(value);
+  const displayRef = useRef(value);
   const rafRef = useRef(null);
 
   useEffect(() => {
-    const from = display;
+    const from = displayRef.current;
     const to = value;
     const start = performance.now();
 
@@ -291,6 +292,7 @@ const useAnimatedNumber = (value, duration = 500) => {
       const eased = t * (2 - t);
       const v = Math.round(from + (to - from) * eased);
 
+      displayRef.current = v;
       setDisplay(v);
 
       if (t < 1) {
@@ -607,14 +609,11 @@ const DashboardPage = () => {
 
   useEffect(() => {
     if (!acta) {
-      if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl);
       setPdfPreviewUrl(null);
       return;
     }
 
     const url = URL.createObjectURL(acta);
-
-    if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl);
 
     setPdfPreviewUrl(url);
   }, [acta]);
@@ -627,7 +626,6 @@ const DashboardPage = () => {
 
   useEffect(() => {
     if (!actaImgs || actaImgs.length === 0) {
-      if (imgPreviewUrl) URL.revokeObjectURL(imgPreviewUrl);
       setImgPreviewUrl(null);
       return;
     }
@@ -637,11 +635,8 @@ const DashboardPage = () => {
     if (first && first.type?.startsWith('image/')) {
       const url = URL.createObjectURL(first);
 
-      if (imgPreviewUrl) URL.revokeObjectURL(imgPreviewUrl);
-
       setImgPreviewUrl(url);
     } else {
-      if (imgPreviewUrl) URL.revokeObjectURL(imgPreviewUrl);
       setImgPreviewUrl(null);
     }
   }, [actaImgs]);
@@ -654,7 +649,6 @@ const DashboardPage = () => {
 
   useEffect(() => {
     if (!imagen) {
-      if (evidPreviewUrl) URL.revokeObjectURL(evidPreviewUrl);
       setEvidPreviewUrl(null);
       return;
     }
@@ -662,11 +656,8 @@ const DashboardPage = () => {
     if (imagen && imagen.type?.startsWith('image/')) {
       const url = URL.createObjectURL(imagen);
 
-      if (evidPreviewUrl) URL.revokeObjectURL(evidPreviewUrl);
-
       setEvidPreviewUrl(url);
     } else {
-      if (evidPreviewUrl) URL.revokeObjectURL(evidPreviewUrl);
       setEvidPreviewUrl(null);
     }
   }, [imagen]);
@@ -822,13 +813,14 @@ const DashboardPage = () => {
         setCntPosteriores((x) => x + subidas);
       }
 
+      setTipo(tipoEnviado === 'previa' ? 'posterior' : 'previa');
+
       setMensaje(
         subidas === 1
           ? 'Imagen y observacion enviadas correctamente'
           : `${subidas} imagenes ${tipoEnviado === 'previa' ? 'previas' : 'posteriores'} enviadas correctamente`
       );
 
-      setTipo(tipoEnviado === 'previa' ? 'posterior' : 'previa');
       setImagen(null);
       setImagenesEvidencia([]);
       setObservacion('');
@@ -1030,13 +1022,6 @@ const DashboardPage = () => {
     setPdfPreviewUrl(null);
     setImgPreviewUrl(null);
     setStep(1);
-    setNumeroIncidencia('');
-    setSelectedTienda('');
-    setSearchText('');
-    setFiltroRegional('');
-    setFiltroDepartamento('');
-    setFiltroCiudad('');
-    setTiendaSuggestOpen(false);
     setCntPrevias(0);
     setCntPosteriores(0);
     setActaOK(false);
@@ -1048,10 +1033,6 @@ const DashboardPage = () => {
     setGeolocalizacion(null);
     setTipo('previa');
     setObservacion('');
-    setMensaje('');
-    setMensajeActa('');
-    localStorage.removeItem('numeroIncidencia');
-    localStorage.setItem('dashStep', '1');
 
     if (!skipRotate) {
       const current = localStorage.getItem('sesionId') || sesionId;
@@ -1073,10 +1054,15 @@ const DashboardPage = () => {
 
     const cleanupAll = async () => {
       try {
-        await resetFlow(true);
+        await serverResetSession(sesionId);
       } catch (e) {
-        console.error('Fallo limpieza al compartir:', e);
+        console.error('Fallo limpieza backend en compartir:', e);
       }
+
+      try {
+        await resetFlow(true);
+        limpiarSesionLocal();
+      } catch {}
     };
 
     const popup = window.open(waUrl, '_blank', 'noopener,noreferrer');
@@ -1085,6 +1071,7 @@ const DashboardPage = () => {
       popup.opener = null;
       setTimeout(() => {
         cleanupAll();
+        navigate('/');
       }, 400);
     } else {
       cleanupAll();
