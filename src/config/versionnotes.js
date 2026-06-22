@@ -8,12 +8,10 @@ export const VERSION_NOTES = {
   items: [
     'Se agregó el módulo de tiendas para administrar puntos desde la app.',
     'Se agregó historial de informes por tienda.',
-    'Se agregó el módulo de usuarios para crear y editar usuarios',
+    'Se mejoró la experiencia mobile first en los módulos principales.',
     'Se agregó geolocalización en los informes generados.',
-    'Se agregó buscador inteligente de tiendas en el Dashboard.',
     'Se agregó subida múltiple de imágenes previas y posteriores.',
-    'se agregó vista de informes generados desde la cuenta de cada técnico',
-    'se agregó edición de numero de incidencia en informes desde el perfil admin',
+    'Se agregó limpieza automática después de compartir el informe por WhatsApp.'
   ]
 };
 
