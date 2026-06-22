@@ -2,7 +2,27 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { http } from '../services/http';
-import { APP_VERSION, VERSION_NOTES, VERSION_STORAGE_KEY } from '../config/versionNotes';
+
+const APP_VERSION = '1.4.0';
+
+const VERSION_NOTES = {
+  version: APP_VERSION,
+  title: 'Novedades de la versión',
+  subtitle: 'Mejoras recientes en Cubica Photo App',
+  date: '2026-06-22',
+  items: [
+    'Se agregó el módulo de tiendas para administrar puntos desde la app.',
+    'Se agregó historial de informes por tienda.',
+    'Se mejoró la experiencia mobile first en los módulos principales.',
+    'Se agregó geolocalización en los informes generados.',
+    'Se agregó buscador inteligente de tiendas en el Dashboard.',
+    'Se agregó subida múltiple de imágenes previas y posteriores.',
+    'Se agregó cambio automático entre previa y posterior al subir evidencias.',
+    'Se agregó limpieza automática después de compartir el informe por WhatsApp.'
+  ]
+};
+
+const VERSION_STORAGE_KEY = `cubica_version_notes_seen_${APP_VERSION}`;
 
 async function loadImageBitmap(file) {
   if ('createImageBitmap' in window) {
