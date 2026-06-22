@@ -1,12 +1,8 @@
-/* eslint-disable react-hooks/exhaustive-deps */
-import React, { useEffect, useState } from 'react';
-import axios from 'axios';
-import { useNavigate } from 'react-router-dom';
+import React, { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useNavigate } from 'react-router-dom';
+import { http } from '../services/http';
 
-const API_BASE = 'https://cubica-photo-app.onrender.com';
-
-/* Modal de confirmación con estilo glass */
 const ConfirmModal = ({
   open,
   title = 'Confirmar',
@@ -18,6 +14,7 @@ const ConfirmModal = ({
   loading = false
 }) => {
   if (!open) return null;
+
   return createPortal(
     <div className="modal-overlay" onClick={onCancel} role="presentation">
       <div
@@ -29,12 +26,14 @@ const ConfirmModal = ({
       >
         <h3 id="confirm-title" className="modal-title">{title}</h3>
         <p className="modal-msg">{message}</p>
+
         <div className="modal-actions">
-          <button className="btn-outline" type="button" onClick={onCancel} disabled={loading}>
+          <button className="btn ghost" type="button" onClick={onCancel} disabled={loading}>
             {cancelText}
           </button>
-          <button className="btn-danger" type="button" onClick={onConfirm} disabled={loading}>
-            {loading ? 'Eliminando…' : confirmText}
+
+          <button className="btn danger" type="button" onClick={onConfirm} disabled={loading}>
+            {loading ? 'Eliminando...' : confirmText}
           </button>
         </div>
       </div>
@@ -46,7 +45,6 @@ const ConfirmModal = ({
 const InformesPage = () => {
   const navigate = useNavigate();
 
-  /* Estado de datos y filtros */
   const [informes, setInformes] = useState([]);
   const [regionales, setRegionales] = useState([]);
   const [page, setPage] = useState(1);
@@ -56,63 +54,93 @@ const InformesPage = () => {
   const [search, setSearch] = useState('');
   const [incidenciaSearch, setIncidenciaSearch] = useState('');
   const [regionalSearch, setRegionalSearch] = useState('');
-
-  /* Estado de UI */
   const [loading, setLoading] = useState(false);
   const [mensaje, setMensaje] = useState('');
 
-  /* Confirmación de borrado */
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [toDelete, setToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
 
-  const nombreTecnico = localStorage.getItem('nombreTecnico') || 'Técnico';
+  const [editOpen, setEditOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editData, setEditData] = useState({
+    id: '',
+    title: '',
+    numeroIncidencia: '',
+    regional: '',
+    includesActa: false
+  });
 
-  /* Cargar lista de regionales para el filtro */
-  useEffect(() => {
-    const fetchRegionales = async () => {
-      try {
-        const res = await axios.get(`${API_BASE}/tiendas/regionales`);
-        setRegionales(res.data);
-      } catch (err) {
-        console.error('Error cargando regionales:', err);
-      }
-    };
-    fetchRegionales();
+  const token = localStorage.getItem('token') || '';
+  const nombreTecnico = localStorage.getItem('nombreTecnico') || 'Tecnico';
+  const isAdmin = localStorage.getItem('isAdmin') === '1' || localStorage.getItem('isAdmin') === 'true';
+
+  const limpiarSesionLocal = useCallback(() => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('sesionId');
+    localStorage.removeItem('nombreTecnico');
+    localStorage.removeItem('isAdmin');
+    localStorage.removeItem('userId');
+    localStorage.removeItem('usuario');
+    localStorage.removeItem('rol');
+    localStorage.removeItem('dashStep');
+    localStorage.removeItem('numeroIncidencia');
   }, []);
 
-  const fetchInformes = async () => {
+  const fetchRegionales = useCallback(async () => {
+    try {
+      const data = await http.get('/tiendas/regionales');
+      const lista = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
+
+      setRegionales(lista);
+    } catch (err) {
+      console.error('Error cargando regionales:', err);
+      setRegionales([]);
+    }
+  }, []);
+
+  const fetchInformes = useCallback(async () => {
     setLoading(true);
     setMensaje('');
+
     try {
-      const res = await axios.get(`${API_BASE}/informes`, {
-        params: { 
-          page, 
-          limit, 
-          search, 
-          incidencia: incidenciaSearch,
-          regional: regionalSearch 
-        }
+      const data = await http.get('/informes', {
+        page,
+        limit,
+        search,
+        incidencia: incidenciaSearch,
+        regional: regionalSearch
       });
-      setInformes(res.data.data || []);
-      setTotal(res.data.total || 0);
-      setTotalPages(res.data.totalPages || 1);
+
+      setInformes(data?.data || []);
+      setTotal(data?.total || 0);
+      setTotalPages(data?.totalPages || 1);
     } catch (err) {
       console.error('Error cargando informes:', err);
-      setMensaje('Error al cargar los informes');
+      setMensaje(err?.response?.data?.error || err?.response?.data?.mensaje || 'Error al cargar los informes');
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchInformes();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, limit, search, incidenciaSearch, regionalSearch]);
 
+  useEffect(() => {
+    if (!token) {
+      navigate('/');
+    }
+  }, [navigate, token]);
+
+  useEffect(() => {
+    fetchRegionales();
+  }, [fetchRegionales]);
+
+  useEffect(() => {
+    if (token) {
+      fetchInformes();
+    }
+  }, [token, fetchInformes]);
+
   const handleCerrarSesion = () => {
-    localStorage.removeItem('sesionId');
-    localStorage.removeItem('nombreTecnico');
+    limpiarSesionLocal();
     navigate('/');
   };
 
@@ -135,14 +163,18 @@ const InformesPage = () => {
 
   const formatIncidencia = (raw) => {
     const s = (raw || '').toString().trim();
-    if (!s) return '—';
+
+    if (!s) return '-';
 
     const upper = s.toUpperCase();
+
     if (upper.startsWith('INC-')) return s.slice(4).trim();
+
     if (upper.startsWith('INC')) {
       const rest = s.slice(3).trim();
       return rest.startsWith('-') ? rest.slice(1).trim() : rest;
     }
+
     return s;
   };
 
@@ -151,16 +183,51 @@ const InformesPage = () => {
     setConfirmOpen(true);
   };
 
+  const handleEdit = (inf) => {
+    setEditData({
+      id: inf._id,
+      title: inf.title || '',
+      numeroIncidencia: inf.numeroIncidencia || '',
+      regional: inf.regional || '',
+      includesActa: Boolean(inf.includesActa)
+    });
+
+    setEditOpen(true);
+  };
+
+  const saveEdit = async () => {
+    if (!editData.id) return;
+
+    setEditing(true);
+    setMensaje('');
+
+    try {
+      await http.put(`/informes/${editData.id}`, {
+        title: editData.title,
+        numeroIncidencia: editData.numeroIncidencia,
+        regional: editData.regional,
+        includesActa: editData.includesActa
+      });
+
+      setEditOpen(false);
+      setMensaje('Informe actualizado correctamente');
+      fetchInformes();
+    } catch (err) {
+      setMensaje(err?.response?.data?.error || err?.response?.data?.mensaje || 'No se pudo actualizar el informe');
+    } finally {
+      setEditing(false);
+      setTimeout(() => setMensaje(''), 3000);
+    }
+  };
+
   const doDelete = async () => {
     if (!toDelete?._id) return;
+
     setDeleting(true);
     setMensaje('');
 
     try {
-      const sesionId = localStorage.getItem('sesionId');
-      await axios.delete(`${API_BASE}/informes/${toDelete._id}`, {
-        params: { sesionId }
-      });
+      await http.delete(`/informes/${toDelete._id}`);
 
       setConfirmOpen(false);
       setToDelete(null);
@@ -172,14 +239,7 @@ const InformesPage = () => {
         fetchInformes();
       }
     } catch (err) {
-      const status = err?.response?.status;
-      const apiMsg = err?.response?.data?.error;
-
-      if (status === 403) {
-        setMensaje('No estás autorizado para eliminar este informe. Verifica que la sesión actual sea la que lo generó.');
-      } else {
-        setMensaje(apiMsg || 'No se pudo eliminar el informe');
-      }
+      setMensaje(err?.response?.data?.error || err?.response?.data?.mensaje || 'No se pudo eliminar el informe');
     } finally {
       setDeleting(false);
       setTimeout(() => setMensaje(''), 3000);
@@ -187,345 +247,1094 @@ const InformesPage = () => {
   };
 
   return (
-    <div className="dash-root">
-      {/* Topbar */}
-      <div className="topbar">
-        <div className="hello">Hola, <strong>{nombreTecnico}</strong></div>
-        <div className="actions">
-          <button className="btn-outline" onClick={() => navigate('/dashboard')}>← Volver</button>
-          <button className="btn-danger" onClick={handleCerrarSesion}>Cerrar sesión</button>
+    <div className="page-root">
+      <header className="topbar">
+        <div>
+          <h1>{isAdmin ? 'Informes' : 'Mis informes'}</h1>
+          <p>{nombreTecnico}</p>
         </div>
-      </div>
 
-      {/* Contenido */}
-      <div className="content">
-        <div className="stack" aria-busy={loading}>
-          <h1 className="title">Informes</h1>
+        <div className="top-actions">
+          <button type="button" className="btn ghost" onClick={() => navigate('/dashboard')}>
+            Dashboard
+          </button>
 
-          {/* Controles */}
-          <div className={`card ${loading ? 'is-busy' : ''}`}>
-            {loading && <div className="md-progress" aria-hidden="true" />}
-            <h2 className="subtitle">Buscar y paginar</h2>
-            <div className="controls-grid">
-              
-              <div className="field">
-                <label className="label">Buscar por título</label>
-                <input
-                  type="text"
-                  className="input"
-                  placeholder="Escribe para filtrar…"
-                  value={search}
-                  onChange={(e) => { setPage(1); setSearch(e.target.value); }}
-                  autoCapitalize="none"
-                  autoCorrect="off"
-                />
-              </div>
-
-              <div className="field">
-                <label className="label">Por incidencia</label>
-                <input
-                  type="text"
-                  className="input"
-                  placeholder="Ej: 12345"
-                  value={incidenciaSearch}
-                  onChange={(e) => { setPage(1); setIncidenciaSearch(e.target.value); }}
-                  autoCapitalize="none"
-                  autoCorrect="off"
-                />
-              </div>
-
-              <div className="field">
-                <label className="label">Por regional</label>
-                <select
-                  className="select"
-                  value={regionalSearch}
-                  onChange={(e) => { setPage(1); setRegionalSearch(e.target.value); }}
-                >
-                  <option value="">Todas</option>
-                  {regionales.map(r => (
-                    <option key={r} value={r}>{r}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="field">
-                <label className="label">Registros</label>
-                <select
-                  className="select"
-                  value={limit}
-                  onChange={(e) => { setPage(1); setLimit(parseInt(e.target.value, 10)); }}
-                >
-                  <option value={5}>5 por pág</option>
-                  <option value={10}>10 por pág</option>
-                  <option value={20}>20 por pág</option>
-                  <option value={50}>50 por pág</option>
-                </select>
-              </div>
-
-              <div className="field">
-                <label className="label">&nbsp;</label>
-                <button className="btn-outline" onClick={fetchInformes} disabled={loading} style={{ width: '100%' }}>
-                  {loading ? '...' : 'Actualizar'}
-                </button>
-              </div>
-            </div>
-
-            {mensaje && <p className="msg" role="status">{mensaje}</p>}
-          </div>
-
-          {/* Skeleton mientras carga */}
-          {loading && (
-            <div className="list">
-              {[1, 2, 3].map((i) => (
-                <div className="card item skeleton" key={`sk-${i}`}>
-                  <div className="sk-line lg" />
-                  <div className="sk-grid">
-                    <div className="sk-line" />
-                    <div className="sk-line" />
-                  </div>
-                  <div className="sk-actions">
-                    <div className="sk-btn" />
-                    <div className="sk-btn wide" />
-                  </div>
-                </div>
-              ))}
-            </div>
+          {isAdmin && (
+            <button type="button" className="btn ghost" onClick={() => navigate('/usuarios')}>
+              Usuarios
+            </button>
           )}
 
-          {/* Lista de informes */}
-          {!loading && (
-            <div className="list">
-              {informes.length === 0 && (
-                <div className="card empty">
-                  <p className="hint">No hay informes para mostrar.</p>
-                </div>
-              )}
+          <button type="button" className="btn danger" onClick={handleCerrarSesion}>
+            Cerrar sesion
+          </button>
+        </div>
+      </header>
 
-              {informes.map((inf) => (
-                <div className="card item" key={inf._id}>
-                  <div className="item-header">
-                    <h3 className="item-title">{inf.title}</h3>
-                    {inf.includesActa && <span className="badge">Incluye acta</span>}
-                  </div>
+      <main className="container">
+        <section className="hero">
+          <div>
+            <span className="eyebrow">Cubica PDF App</span>
+            <h2>{isAdmin ? 'Gestion de informes' : 'Tus informes generados'}</h2>
+            <p>
+              Consulta, filtra y revisa los informes tecnicos generados desde la aplicacion.
+            </p>
+          </div>
 
-                  <div className="meta">
-                    <div><span className="meta-label">Generado por:</span> {inf.generatedBy?.nombre || inf.generatedBy?.usuario || '—'}</div>
-                    <div><span className="meta-label">Fecha:</span> {formatFecha(inf.createdAt)}</div>
-                    <div><span className="meta-label">Incidencia:</span> {formatIncidencia(inf.numeroIncidencia)}</div>
-                  </div>
+          <div className="hero-stat">
+            <span>Total</span>
+            <strong>{total}</strong>
+          </div>
+        </section>
 
-                  <div className="row-actions">
-                    <button className="btn-outline" onClick={() => handleVer(inf.url)}>Ver</button>
-                    <button className="btn-danger" onClick={() => askDelete(inf)}>Eliminar</button>
-                  </div>
-                </div>
-              ))}
+        <section className={`card filters-card ${loading ? 'is-busy' : ''}`}>
+          {loading && <div className="md-progress" aria-hidden="true" />}
+
+          <div className="section-heading">
+            <h3>Buscar informes</h3>
+            <p>Filtra por titulo, incidencia o regional.</p>
+          </div>
+
+          <div className="controls-grid">
+            <div className="field">
+              <label>Buscar por titulo</label>
+              <input
+                type="text"
+                placeholder="Escribe para filtrar"
+                value={search}
+                onChange={(e) => {
+                  setPage(1);
+                  setSearch(e.target.value);
+                }}
+                autoCapitalize="none"
+                autoCorrect="off"
+              />
             </div>
-          )}
 
-          {/* Paginación */}
-          <div className="card pager">
-            <div className="pager-row">
-              <span className="hint">Página {page} de {totalPages} • Total: {total}</span>
-              <div className="pager-buttons">
-                <button
-                  className="btn-outline"
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={page <= 1 || loading}
-                >
-                  Anterior
-                </button>
-                <button
-                  className="btn"
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={page >= totalPages || loading}
-                >
-                  Siguiente
-                </button>
-              </div>
+            <div className="field">
+              <label>Incidencia</label>
+              <input
+                type="text"
+                placeholder="Ej: 12345"
+                value={incidenciaSearch}
+                onChange={(e) => {
+                  setPage(1);
+                  setIncidenciaSearch(e.target.value);
+                }}
+                autoCapitalize="none"
+                autoCorrect="off"
+              />
+            </div>
+
+            <div className="field">
+              <label>Regional</label>
+              <select
+                value={regionalSearch}
+                onChange={(e) => {
+                  setPage(1);
+                  setRegionalSearch(e.target.value);
+                }}
+              >
+                <option value="">Todas</option>
+                {regionales.map((r) => (
+                  <option key={r} value={r}>{r}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="field">
+              <label>Registros</label>
+              <select
+                value={limit}
+                onChange={(e) => {
+                  setPage(1);
+                  setLimit(parseInt(e.target.value, 10));
+                }}
+              >
+                <option value={5}>5 por pagina</option>
+                <option value={10}>10 por pagina</option>
+                <option value={20}>20 por pagina</option>
+                <option value={50}>50 por pagina</option>
+              </select>
             </div>
           </div>
-        </div>
-      </div>
 
-      {/* Modal de confirmación */}
+          <div className="filter-actions">
+            <button
+              type="button"
+              className="btn ghost"
+              onClick={() => {
+                setPage(1);
+                setSearch('');
+                setIncidenciaSearch('');
+                setRegionalSearch('');
+              }}
+              disabled={loading}
+            >
+              Limpiar
+            </button>
+
+            <button type="button" className="btn primary" onClick={fetchInformes} disabled={loading}>
+              {loading ? 'Cargando...' : 'Actualizar'}
+            </button>
+          </div>
+
+          {mensaje && <p className="message">{mensaje}</p>}
+        </section>
+
+        {loading && (
+          <section className="list">
+            {[1, 2, 3].map((i) => (
+              <article className="card item skeleton" key={`sk-${i}`}>
+                <div className="sk-line lg" />
+                <div className="sk-grid">
+                  <div className="sk-line" />
+                  <div className="sk-line" />
+                </div>
+                <div className="sk-actions">
+                  <div className="sk-btn" />
+                  <div className="sk-btn wide" />
+                </div>
+              </article>
+            ))}
+          </section>
+        )}
+
+        {!loading && (
+          <section className="list">
+            {informes.length === 0 && (
+              <article className="card empty">
+                <h3>No hay informes</h3>
+                <p>No se encontraron informes con los filtros seleccionados.</p>
+              </article>
+            )}
+
+            {informes.map((inf) => (
+              <article className="card item" key={inf._id}>
+                <div className="item-header">
+                  <div>
+                    <h3>{inf.title}</h3>
+                    <p>{formatFecha(inf.createdAt)}</p>
+                  </div>
+
+                  {inf.includesActa && <span className="badge">Incluye acta</span>}
+                </div>
+
+                <div className="meta-grid">
+                  <div>
+                    <span>Generado por</span>
+                    <strong>{inf.generatedBy?.nombre || inf.generatedBy?.usuario || '-'}</strong>
+                  </div>
+
+                  <div>
+                    <span>Incidencia</span>
+                    <strong>{formatIncidencia(inf.numeroIncidencia)}</strong>
+                  </div>
+
+                  <div>
+                    <span>Regional</span>
+                    <strong>{inf.regional || '-'}</strong>
+                  </div>
+                </div>
+
+                <div className="row-actions">
+                  <button
+                    type="button"
+                    className="btn ghost"
+                    onClick={() => handleVer(inf.shareUrl || inf.url)}
+                  >
+                    Ver PDF
+                  </button>
+
+                  {isAdmin && (
+                    <>
+                      <button type="button" className="btn primary" onClick={() => handleEdit(inf)}>
+                        Editar
+                      </button>
+
+                      <button type="button" className="btn danger" onClick={() => askDelete(inf)}>
+                        Eliminar
+                      </button>
+                    </>
+                  )}
+                </div>
+              </article>
+            ))}
+          </section>
+        )}
+
+        <section className="card pager">
+          <div>
+            <span>Pagina {page} de {totalPages}</span>
+            <strong>Total: {total}</strong>
+          </div>
+
+          <div className="pager-buttons">
+            <button
+              type="button"
+              className="btn ghost"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1 || loading}
+            >
+              Anterior
+            </button>
+
+            <button
+              type="button"
+              className="btn primary"
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages || loading}
+            >
+              Siguiente
+            </button>
+          </div>
+        </section>
+      </main>
+
       <ConfirmModal
         open={confirmOpen}
         title="Eliminar informe"
-        message={toDelete ? `¿Seguro que deseas eliminar “${toDelete.title}”? Esta acción no se puede deshacer.` : ''}
+        message={toDelete ? `Seguro que deseas eliminar "${toDelete.title}"? Esta accion no se puede deshacer.` : ''}
         confirmText="Eliminar"
         cancelText="Cancelar"
         onConfirm={doDelete}
-        onCancel={() => { if (!deleting) { setConfirmOpen(false); setToDelete(null); } }}
+        onCancel={() => {
+          if (!deleting) {
+            setConfirmOpen(false);
+            setToDelete(null);
+          }
+        }}
         loading={deleting}
       />
 
-      {/* Estilos */}
+      {editOpen && createPortal(
+        <div className="modal-overlay" role="presentation">
+          <div className="modal-panel" role="dialog" aria-modal="true">
+            <h3 className="modal-title">Editar informe</h3>
+            <p className="modal-msg">Actualiza la informacion visible del informe.</p>
+
+            <div className="field">
+              <label>Titulo</label>
+              <input
+                value={editData.title}
+                onChange={(e) =>
+                  setEditData((prev) => ({
+                    ...prev,
+                    title: e.target.value
+                  }))
+                }
+              />
+            </div>
+
+            <div className="field">
+              <label>Numero de incidencia</label>
+              <input
+                value={editData.numeroIncidencia}
+                onChange={(e) =>
+                  setEditData((prev) => ({
+                    ...prev,
+                    numeroIncidencia: e.target.value
+                  }))
+                }
+              />
+            </div>
+
+            <div className="field">
+              <label>Regional</label>
+              <select
+                value={editData.regional}
+                onChange={(e) =>
+                  setEditData((prev) => ({
+                    ...prev,
+                    regional: e.target.value
+                  }))
+                }
+              >
+                <option value="">Selecciona regional</option>
+                {regionales.map((r) => (
+                  <option key={r} value={r}>{r}</option>
+                ))}
+              </select>
+            </div>
+
+            <label className="check-label">
+              <input
+                type="checkbox"
+                checked={editData.includesActa}
+                onChange={(e) =>
+                  setEditData((prev) => ({
+                    ...prev,
+                    includesActa: e.target.checked
+                  }))
+                }
+              />
+              Incluye acta
+            </label>
+
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="btn ghost"
+                onClick={() => setEditOpen(false)}
+                disabled={editing}
+              >
+                Cancelar
+              </button>
+
+              <button
+                type="button"
+                className="btn primary"
+                onClick={saveEdit}
+                disabled={editing}
+              >
+                {editing ? 'Guardando...' : 'Guardar'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
       <style>{`
-        *, *::before, *::after { box-sizing: border-box; }
-        html, body, #root { height: 100%; }
-        html, body { margin: 0; background: #0f1113; }
-
-        :root{
-          --primary:#fff200;
-          --on-primary:#111111;
-          --bg:#0f1113;
-          --surface:#15181c;
-          --on-surface:#e9eaec;
-          --outline:rgba(255,255,255,0.18);
-          --outline-strong:rgba(255,255,255,0.28);
-          --label:#b8bcc3;
-          --danger:#ef4444;
-          --focus:rgba(255,242,0,0.35);
+        *, *::before, *::after {
+          box-sizing: border-box;
         }
 
-        .dash-root{
-          min-height:100svh; min-height:100dvh; width:100%;
-          background:var(--bg); color:var(--on-surface);
-          font-family: Inter, Roboto, system-ui, -apple-system, Segoe UI, Helvetica, Arial;
+        html,
+        body,
+        #root {
+          min-height: 100%;
+        }
+
+        body {
+          margin: 0;
+          background: #0b0d10;
+        }
+
+        .page-root {
+          min-height: 100vh;
+          min-height: 100dvh;
+          background:
+            radial-gradient(circle at top left, rgba(255, 242, 0, 0.12), transparent 28%),
+            radial-gradient(circle at bottom right, rgba(255, 255, 255, 0.07), transparent 32%),
+            linear-gradient(180deg, #101317 0%, #0b0d10 100%);
+          color: #f4f4f5;
+          font-family: Inter, Roboto, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif;
           -webkit-tap-highlight-color: transparent;
-          padding: max(10px, env(safe-area-inset-top,0px)) 10px max(10px, env(safe-area-inset-bottom,0px));
+          padding: max(12px, env(safe-area-inset-top, 0px)) 12px max(18px, env(safe-area-inset-bottom, 0px));
         }
 
-        .topbar{
-          position:sticky; top:max(8px, env(safe-area-inset-top,0px));
-          display:flex; align-items:center; justify-content:space-between; gap:8px; margin:6px auto 10px;
-          width:min(100%,960px); padding:10px 12px; border-radius:14px; background:rgba(255,255,255,0.06);
-          border:1px solid var(--outline); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
-          box-shadow:0 8px 24px rgba(0,0,0,0.18);
-          z-index: 100;
+        .topbar {
+          position: sticky;
+          top: max(8px, env(safe-area-inset-top, 0px));
+          z-index: 50;
+          width: min(1180px, 100%);
+          margin: 0 auto 14px;
+          padding: 12px;
+          border-radius: 22px;
+          background: rgba(255, 255, 255, 0.07);
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          backdrop-filter: blur(18px);
+          -webkit-backdrop-filter: blur(18px);
+          box-shadow: 0 14px 44px rgba(0, 0, 0, 0.3);
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 14px;
         }
-        .hello{ font-weight:600; }
-        .actions{ display:flex; gap:8px; flex-wrap:wrap; }
 
-        .content{ display:flex; justify-content:center; }
-        .stack{ width:min(100%,960px); display:flex; flex-direction:column; align-items:center; gap:16px; padding:12px 12px 28px; }
-
-        .title{ margin:6px 0 0 0; font-weight:800; font-size:clamp(18px,4.5vw,28px); letter-spacing:.2px; text-align:center; }
-
-        .card{
-          position:relative;
-          width:100%; max-width:960px; padding:16px; border-radius:16px; background:var(--surface);
-          border:1px solid var(--outline); color:var(--on-surface);
-          box-shadow:0 10px 36px rgba(0,0,0,0.30); transition:transform 160ms ease, box-shadow 180ms ease;
-          animation: md-enter 260ms cubic-bezier(.2,.8,.2,1);
+        .topbar h1 {
+          margin: 0;
+          font-size: clamp(22px, 6vw, 34px);
+          line-height: 1;
+          letter-spacing: -0.05em;
+          font-weight: 900;
         }
-        .card:hover{ transform: translateY(-1px); box-shadow: 0 12px 42px rgba(0,0,0,0.34); }
-        .card.is-busy{ animation: md-busy 700ms ease-out 1; }
-        .card.empty{ text-align:center; }
 
-        .subtitle{ margin:0 0 10px 0; font-size:clamp(16px,4vw,20px); font-weight:700; }
-
-        .controls-grid{ display:grid; grid-template-columns:1fr; gap:10px; align-items:end; }
-        @media (min-width:800px){ .controls-grid{ grid-template-columns:minmax(200px,2fr) minmax(130px,1fr) minmax(130px,1fr) 130px 100px; align-items:end; } }
-        .controls-grid .field{ margin-bottom:0; }
-        .controls-grid .label{ min-height:34px; }
-
-        .field{ margin-bottom:8px; }
-        .label{ display:block; font-weight:600; color:var(--label); margin-bottom:6px; font-size: 0.9rem; }
-
-        .input, .select{
-          width:100%; border-radius:12px; border:1px solid var(--outline); background:transparent; color:var(--on-surface);
-          font-size:16px; outline:none; transition:border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
-          height:48px; padding:10px 12px;
+        .topbar p {
+          margin: 5px 0 0;
+          color: #c5c8ce;
+          font-size: 14px;
+          font-weight: 700;
         }
-        .select{ appearance:none; }
-        /* Añadir icono flecha al select para que se vea nativo bonito */
-        .select {
-          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23e9eaec'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+
+        .top-actions {
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+
+        .container {
+          width: min(980px, 100%);
+          margin: 0 auto;
+          padding: 6px 0 34px;
+        }
+
+        .hero {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+          gap: 16px;
+          align-items: stretch;
+          margin-bottom: 16px;
+        }
+
+        .hero > div:first-child,
+        .hero-stat {
+          padding: clamp(22px, 5vw, 34px);
+          border-radius: 28px;
+          background: rgba(255, 255, 255, 0.06);
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          backdrop-filter: blur(18px);
+          -webkit-backdrop-filter: blur(18px);
+          box-shadow: 0 22px 70px rgba(0, 0, 0, 0.3);
+        }
+
+        .eyebrow {
+          width: fit-content;
+          display: inline-flex;
+          align-items: center;
+          padding: 8px 12px;
+          border-radius: 999px;
+          background: rgba(255, 242, 0, 0.12);
+          border: 1px solid rgba(255, 242, 0, 0.24);
+          color: #fff200;
+          font-size: 12px;
+          font-weight: 900;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+          margin-bottom: 14px;
+        }
+
+        .hero h2 {
+          margin: 0;
+          font-size: clamp(28px, 8vw, 48px);
+          line-height: 0.98;
+          letter-spacing: -0.07em;
+          font-weight: 900;
+        }
+
+        .hero p {
+          margin: 12px 0 0;
+          color: #c5c8ce;
+          line-height: 1.5;
+          max-width: 620px;
+        }
+
+        .hero-stat {
+          min-width: 148px;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          gap: 6px;
+          background: rgba(255, 242, 0, 0.11);
+          border-color: rgba(255, 242, 0, 0.24);
+        }
+
+        .hero-stat span {
+          color: #c5c8ce;
+          font-size: 12px;
+          font-weight: 900;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+        }
+
+        .hero-stat strong {
+          color: #fff200;
+          font-size: 44px;
+          line-height: 1;
+          font-weight: 900;
+        }
+
+        .card {
+          position: relative;
+          width: 100%;
+          border-radius: 24px;
+          background: rgba(255, 255, 255, 0.075);
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          box-shadow: 0 22px 70px rgba(0, 0, 0, 0.32);
+          backdrop-filter: blur(22px);
+          -webkit-backdrop-filter: blur(22px);
+          padding: clamp(18px, 4vw, 24px);
+          animation: enter 240ms ease-out;
+          overflow: hidden;
+        }
+
+        .card.is-busy {
+          animation: busy 700ms ease-out 1;
+        }
+
+        .filters-card {
+          margin-bottom: 16px;
+        }
+
+        .section-heading {
+          margin-bottom: 16px;
+        }
+
+        .section-heading h3 {
+          margin: 0;
+          font-size: clamp(21px, 5vw, 30px);
+          line-height: 1;
+          letter-spacing: -0.05em;
+          font-weight: 900;
+        }
+
+        .section-heading p {
+          margin: 8px 0 0;
+          color: #c5c8ce;
+          line-height: 1.4;
+        }
+
+        .controls-grid {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 14px;
+        }
+
+        .field {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          margin-bottom: 14px;
+        }
+
+        .field label {
+          color: #d7d9dd;
+          font-size: 13px;
+          font-weight: 800;
+        }
+
+        input,
+        select {
+          width: 100%;
+          min-height: 52px;
+          border: 1px solid rgba(255, 255, 255, 0.16);
+          background: rgba(255, 255, 255, 0.08);
+          color: #f5f5f5;
+          border-radius: 16px;
+          padding: 0 16px;
+          font-size: 16px;
+          outline: none;
+          transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+        }
+
+        input::placeholder {
+          color: rgba(197, 200, 206, 0.72);
+        }
+
+        select {
+          cursor: pointer;
+          appearance: none;
+          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23f4f4f5'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
           background-repeat: no-repeat;
-          background-position: right 12px center;
+          background-position: right 14px center;
           background-size: 16px;
-          padding-right: 36px;
+          padding-right: 42px;
         }
 
-        .input:focus, .select:focus{ box-shadow:0 0 0 4px var(--focus); border-color:var(--outline-strong); }
-
-        .btn{
-          height:48px; padding:12px; background:var(--primary); color:var(--on-primary); border:none; border-radius:12px;
-          font-weight:800; cursor:pointer; display:inline-flex; align-items:center; justify-content:center;
-          transition:transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease; user-select:none;
-          box-shadow:0 8px 24px rgba(0,0,0,0.18);
-        }
-        .btn:hover{ transform:translateY(-1px); }
-        .btn:active{ transform:translateY(0); }
-        .btn:disabled{ opacity:.7; cursor:not-allowed; }
-
-        .btn-outline{
-          height:48px; padding:10px 14px; border-radius:12px; font-weight:700; cursor:pointer;
-          background:rgba(255,255,255,0.08); color:var(--on-surface); border:1px solid var(--outline);
-          backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
-          transition:transform 120ms ease, opacity 120ms ease, background 150ms ease, border-color 150ms ease;
-        }
-        .btn-outline:hover{ transform:translateY(-1px); }
-
-        .btn-danger{
-          height:48px; padding:10px 14px; border-radius:12px; font-weight:700; cursor:pointer;
-          background:var(--danger); color:#fff; border:none; transition:transform 120ms ease, opacity 120ms ease;
-        }
-        .btn-danger:hover{ transform:translateY(-1px); }
-
-        .msg{ margin-top:10px; font-weight:700; text-align:center; }
-
-        .list{ width:min(100%,960px); display:flex; flex-direction:column; gap:12px; }
-        .item-header{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
-        .item-title{ margin:0; font-size:clamp(16px,2.8vw,20px); font-weight:800; }
-        .badge{
-          display:inline-block; padding:6px 10px; border-radius:999px; background:rgba(255,255,255,0.10);
-          border:1px solid var(--outline); font-weight:800; font-size:13px;
+        option {
+          background: #15181c;
+          color: #f4f4f5;
         }
 
-        .meta{
-          display:grid; grid-template-columns:1fr; gap:6px; margin:8px 0 10px; color:var(--label);
+        input:focus,
+        select:focus {
+          border-color: rgba(255, 242, 0, 0.45);
+          box-shadow: 0 0 0 4px rgba(255, 242, 0, 0.12);
+          background: rgba(255, 255, 255, 0.1);
         }
-        @media (min-width:560px){ .meta{ grid-template-columns:1fr 1fr; } }
-        .meta-label{ font-weight:700; color:var(--on-surface); margin-right:6px; }
 
-        .row-actions{ display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
-
-        .pager .pager-row{ display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; }
-        .pager-buttons{ display:flex; gap:8px; }
-
-        .md-progress{
-          position:absolute; top:0; left:0; right:0; height:3px; overflow:hidden;
-          border-top-left-radius:16px; border-top-right-radius:16px; background:transparent;
+        .filter-actions {
+          display: flex;
+          justify-content: flex-end;
+          gap: 10px;
+          flex-wrap: wrap;
+          margin-top: 4px;
         }
-        .md-progress::before{
-          content:""; position:absolute; inset:0;
-          background: linear-gradient(90deg, transparent 0, rgba(255,242,0,.2) 30%, var(--primary) 52%, rgba(255,242,0,.2) 74%, transparent 100%);
+
+        .btn {
+          min-height: 48px;
+          border: 0;
+          border-radius: 16px;
+          padding: 0 18px;
+          font-size: 14px;
+          font-weight: 900;
+          cursor: pointer;
+          transition: transform 120ms ease, opacity 120ms ease, box-shadow 160ms ease, background 160ms ease;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          user-select: none;
+          white-space: nowrap;
+        }
+
+        .btn:hover:not(:disabled) {
+          transform: translateY(-1px);
+        }
+
+        .btn:disabled {
+          cursor: not-allowed;
+          opacity: 0.58;
+        }
+
+        .btn.primary {
+          background: #fff200;
+          color: #111;
+          box-shadow: 0 14px 32px rgba(255, 242, 0, 0.16);
+        }
+
+        .btn.ghost {
+          background: rgba(255, 255, 255, 0.08);
+          color: #fff;
+          border: 1px solid rgba(255, 255, 255, 0.14);
+        }
+
+        .btn.danger {
+          background: rgba(255, 74, 74, 0.14);
+          color: #ffb7b7;
+          border: 1px solid rgba(255, 74, 74, 0.24);
+        }
+
+        .message {
+          margin: 14px 0 0;
+          padding: 12px 14px;
+          border-radius: 16px;
+          background: rgba(255, 255, 255, 0.08);
+          color: #f1f1f1;
+          font-weight: 800;
+          text-align: center;
+          line-height: 1.35;
+        }
+
+        .list {
+          display: flex;
+          flex-direction: column;
+          gap: 14px;
+        }
+
+        .item {
+          display: flex;
+          flex-direction: column;
+          gap: 14px;
+        }
+
+        .item-header {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 12px;
+        }
+
+        .item-header h3 {
+          margin: 0;
+          font-size: clamp(18px, 5vw, 24px);
+          line-height: 1.1;
+          letter-spacing: -0.04em;
+          font-weight: 900;
+          overflow-wrap: anywhere;
+        }
+
+        .item-header p {
+          margin: 6px 0 0;
+          color: #c5c8ce;
+          font-size: 14px;
+          font-weight: 700;
+        }
+
+        .badge {
+          flex: 0 0 auto;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 32px;
+          padding: 7px 11px;
+          border-radius: 999px;
+          background: rgba(255, 242, 0, 0.12);
+          border: 1px solid rgba(255, 242, 0, 0.25);
+          color: #fff200;
+          font-size: 12px;
+          font-weight: 900;
+        }
+
+        .meta-grid {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 10px;
+        }
+
+        .meta-grid div {
+          min-width: 0;
+          padding: 13px;
+          border-radius: 18px;
+          background: rgba(255, 255, 255, 0.06);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .meta-grid span {
+          display: block;
+          color: #b8bcc3;
+          font-size: 12px;
+          font-weight: 900;
+          margin-bottom: 5px;
+        }
+
+        .meta-grid strong {
+          display: block;
+          color: #fff;
+          font-size: 14px;
+          overflow-wrap: anywhere;
+        }
+
+        .row-actions {
+          display: flex;
+          justify-content: flex-end;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+
+        .empty {
+          text-align: center;
+        }
+
+        .empty h3 {
+          margin: 0;
+          font-size: 22px;
+          letter-spacing: -0.04em;
+        }
+
+        .empty p {
+          margin: 8px 0 0;
+          color: #c5c8ce;
+        }
+
+        .pager {
+          margin-top: 16px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 14px;
+        }
+
+        .pager span {
+          display: block;
+          color: #b8bcc3;
+          font-size: 13px;
+          font-weight: 800;
+        }
+
+        .pager strong {
+          display: block;
+          color: #fff200;
+          margin-top: 4px;
+          font-size: 18px;
+        }
+
+        .pager-buttons {
+          display: flex;
+          gap: 10px;
+          flex-wrap: wrap;
+          justify-content: flex-end;
+        }
+
+        .md-progress {
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          height: 3px;
+          overflow: hidden;
+          background: transparent;
+        }
+
+        .md-progress::before {
+          content: "";
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(90deg, transparent 0, rgba(255, 242, 0, 0.2) 30%, #fff200 52%, rgba(255, 242, 0, 0.2) 74%, transparent 100%);
           transform: translateX(-100%);
-          animation: md-indeterminate 1.2s cubic-bezier(.4,0,.2,1) infinite;
+          animation: indeterminate 1.2s cubic-bezier(.4, 0, .2, 1) infinite;
         }
 
-        /* Skeletons */
-        .skeleton .sk-line{ height:12px; border-radius:8px; background:linear-gradient(90deg, rgba(255,255,255,0.06), rgba(255,255,255,0.12), rgba(255,255,255,0.06)); background-size:200% 100%; animation: sk 1.2s linear infinite; }
-        .skeleton .sk-line.lg{ height:18px; width:60%; margin-bottom:10px; }
-        .skeleton .sk-grid{ display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:8px 0 10px; }
-        .skeleton .sk-actions{ display:flex; gap:8px; justify-content:flex-end; }
-        .skeleton .sk-btn{ width:92px; height:40px; border-radius:10px; background:linear-gradient(90deg, rgba(255,255,255,0.06), rgba(255,255,255,0.12), rgba(255,255,255,0.06)); background-size:200% 100%; animation: sk 1.2s linear infinite; }
-        .skeleton .sk-btn.wide{ width:120px; }
-
-        /* Modal glass */
-        .modal-overlay{
-          position:fixed; inset:0; z-index:2147483647; background:rgba(0,0,0,0.12);
-          backdrop-filter:blur(2.5px) saturate(120%); -webkit-backdrop-filter:blur(2.5px) saturate(120%);
-          display:flex; align-items:center; justify-content:center; padding:12px; animation: fadeIn 120ms ease forwards;
+        .skeleton .sk-line {
+          height: 12px;
+          border-radius: 8px;
+          background: linear-gradient(90deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.06));
+          background-size: 200% 100%;
+          animation: sk 1.2s linear infinite;
         }
-        .modal-panel{
-          width:min(520px,92vw); background:var(--surface); border:1px solid var(--outline); color:var(--on-surface);
-          border-radius:16px; box-shadow:0 16px 40px rgba(0,0,0,0.28); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
-          padding:16px; animation: pop 140ms ease;
-        }
-        .modal-title{ margin:0 0 8px; font-size:clamp(18px,3vw,22px); font-weight:800; }
-        .modal-msg{ margin:0 0 14px; color:var(--label); }
-        .modal-actions{ display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; }
 
-        @keyframes md-enter{ from{ opacity:0; transform: translateY(4px) scale(.995);} to{ opacity:1; transform: translateY(0) scale(1);} }
-        @keyframes md-busy{ 0%{transform:translateY(0) scale(1);} 40%{transform:translateY(-1px) scale(1.005);} 100%{transform:translateY(0) scale(1);} }
-        @keyframes md-indeterminate{ to { transform: translateX(100%); } }
-        @keyframes sk{ 0%{ background-position:200% 0; } 100%{ background-position:-200% 0; } }
-        @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
-        @keyframes pop { from { opacity: 0; transform: translateY(6px) scale(0.98) } to { opacity: 1; transform: translateY(0) scale(1) } }
+        .skeleton .sk-line.lg {
+          height: 20px;
+          width: 72%;
+          margin-bottom: 10px;
+        }
+
+        .skeleton .sk-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr 1fr;
+          gap: 10px;
+          margin: 10px 0;
+        }
+
+        .skeleton .sk-actions {
+          display: flex;
+          justify-content: flex-end;
+          gap: 10px;
+        }
+
+        .skeleton .sk-btn {
+          width: 100px;
+          height: 42px;
+          border-radius: 14px;
+          background: linear-gradient(90deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.06));
+          background-size: 200% 100%;
+          animation: sk 1.2s linear infinite;
+        }
+
+        .skeleton .sk-btn.wide {
+          width: 130px;
+        }
+
+        .modal-overlay {
+          position: fixed;
+          inset: 0;
+          z-index: 9999;
+          background: rgba(0, 0, 0, 0.52);
+          backdrop-filter: blur(10px);
+          -webkit-backdrop-filter: blur(10px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 18px;
+        }
+
+        .modal-panel {
+          width: min(520px, 100%);
+          max-height: calc(100vh - 36px);
+          overflow: auto;
+          border-radius: 26px;
+          background: rgba(21, 24, 28, 0.96);
+          border: 1px solid rgba(255, 255, 255, 0.14);
+          box-shadow: 0 24px 90px rgba(0, 0, 0, 0.46);
+          padding: 22px;
+          animation: pop 150ms ease-out;
+        }
+
+        .modal-title {
+          margin: 0;
+          font-size: clamp(24px, 6vw, 32px);
+          line-height: 1;
+          letter-spacing: -0.05em;
+          font-weight: 900;
+        }
+
+        .modal-msg {
+          margin: 10px 0 18px;
+          color: #c5c8ce;
+          line-height: 1.45;
+        }
+
+        .modal-actions {
+          display: flex;
+          justify-content: flex-end;
+          gap: 10px;
+          flex-wrap: wrap;
+          margin-top: 18px;
+        }
+
+        .check-label {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          color: #f4f4f5;
+          font-weight: 800;
+          margin: 4px 0 16px;
+        }
+
+        .check-label input {
+          width: 18px;
+          height: 18px;
+          min-height: 18px;
+          padding: 0;
+        }
+
+        @keyframes enter {
+          from {
+            opacity: 0;
+            transform: translateY(8px) scale(0.99);
+          }
+
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+
+        @keyframes busy {
+          0% {
+            transform: translateY(0) scale(1);
+          }
+
+          40% {
+            transform: translateY(-1px) scale(1.005);
+          }
+
+          100% {
+            transform: translateY(0) scale(1);
+          }
+        }
+
+        @keyframes indeterminate {
+          to {
+            transform: translateX(100%);
+          }
+        }
+
+        @keyframes sk {
+          0% {
+            background-position: 200% 0;
+          }
+
+          100% {
+            background-position: -200% 0;
+          }
+        }
+
+        @keyframes pop {
+          from {
+            opacity: 0;
+            transform: translateY(8px) scale(0.98);
+          }
+
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+
+        @media (max-width: 860px) {
+          .page-root {
+            padding-left: 10px;
+            padding-right: 10px;
+          }
+
+          .topbar {
+            align-items: stretch;
+            flex-direction: column;
+          }
+
+          .top-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            width: 100%;
+          }
+
+          .top-actions .btn {
+            width: 100%;
+          }
+
+          .top-actions .btn.danger {
+            grid-column: 1 / -1;
+          }
+
+          .hero {
+            grid-template-columns: 1fr;
+          }
+
+          .hero-stat {
+            min-width: 0;
+            flex-direction: row;
+            align-items: center;
+            justify-content: space-between;
+          }
+
+          .hero-stat strong {
+            font-size: 38px;
+          }
+
+          .controls-grid {
+            grid-template-columns: 1fr;
+            gap: 4px;
+          }
+
+          .filter-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+          }
+
+          .filter-actions .btn {
+            width: 100%;
+          }
+
+          .meta-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .row-actions {
+            display: grid;
+            grid-template-columns: 1fr;
+          }
+
+          .row-actions .btn {
+            width: 100%;
+          }
+
+          .pager {
+            align-items: stretch;
+            flex-direction: column;
+          }
+
+          .pager-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            width: 100%;
+          }
+
+          .pager-buttons .btn {
+            width: 100%;
+          }
+
+          .modal-actions {
+            display: grid;
+            grid-template-columns: 1fr;
+          }
+
+          .modal-actions .btn {
+            width: 100%;
+          }
+        }
+
+        @media (max-width: 420px) {
+          .card,
+          .hero > div:first-child,
+          .hero-stat,
+          .topbar {
+            border-radius: 22px;
+          }
+
+          .top-actions {
+            grid-template-columns: 1fr;
+          }
+
+          .filter-actions {
+            grid-template-columns: 1fr;
+          }
+
+          .pager-buttons {
+            grid-template-columns: 1fr;
+          }
+
+          .item-header {
+            flex-direction: column;
+            align-items: stretch;
+          }
+
+          .badge {
+            width: fit-content;
+          }
+        }
       `}</style>
     </div>
   );

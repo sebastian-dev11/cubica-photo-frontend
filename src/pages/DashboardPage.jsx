@@ -1,22 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import { http } from '../services/http';
 
-/* =============================
-   Config API
-============================= */
-const API_BASE = 'https://cubica-photo-app.onrender.com';
-
-/* =============================
-   Utilidades de optimización de imágenes (sin librerías)
-   - optimizeImage: reescala y recomprime a JPEG
-   - loadImageBitmap / loadHTMLImageElement: carga robusta con fallback
-   - drawToCanvas: pinto manteniendo proporción
-   - blobToFile: reconstruyo File a partir de Blob
-============================= */
-
-// Carga de imagen (prefiere createImageBitmap para performance)
 async function loadImageBitmap(file) {
   if ('createImageBitmap' in window) {
     try {
@@ -24,6 +10,7 @@ async function loadImageBitmap(file) {
       return { width: bmp.width, height: bmp.height, source: bmp, isBitmap: true };
     } catch {}
   }
+
   return await loadHTMLImageElement(file);
 }
 
@@ -38,17 +25,24 @@ function readAsDataURL(file) {
 
 async function loadHTMLImageElement(file) {
   const src = await readAsDataURL(file);
+
   await new Promise((res, rej) => {
     const img = new Image();
     img.onload = () => res();
     img.onerror = rej;
     img.src = src;
   });
-  // Volvemos a crear para tener referencia
+
   const img2 = new Image();
   img2.src = src;
   await img2.decode?.();
-  return { width: img2.naturalWidth || img2.width, height: img2.naturalHeight || img2.height, source: img2, isBitmap: false };
+
+  return {
+    width: img2.naturalWidth || img2.width,
+    height: img2.naturalHeight || img2.height,
+    source: img2,
+    isBitmap: false
+  };
 }
 
 function drawToCanvas(source, sw, sh, maxW) {
@@ -59,17 +53,18 @@ function drawToCanvas(source, sw, sh, maxW) {
   const canvas = document.createElement('canvas');
   canvas.width = outW;
   canvas.height = outH;
-  const ctx = canvas.getContext('2d', { alpha: false });
 
-  // Imagen nítida sin suavizado exagerado
+  const ctx = canvas.getContext('2d', { alpha: false });
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(source, 0, 0, outW, outH);
+
   return canvas;
 }
 
 function blobToFile(blob, name, type) {
-  // File constructor es soportado ampliamente en navegadores modernos
-  try { return new File([blob], name, { type }); } catch {
+  try {
+    return new File([blob], name, { type });
+  } catch {
     blob.name = name;
     blob.type = type;
     return blob;
@@ -82,52 +77,60 @@ async function optimizeImage(file, {
   format = 'image/jpeg',
   fallbacks = [{ maxWidth: 1280, quality: 0.7 }]
 } = {}) {
-  // Validación de tipo
   if (!file || !file.type?.startsWith('image/')) return file;
 
-  // Cargamos fuente
   const { width, height, source, isBitmap } = await loadImageBitmap(file);
 
-  // Si ya es razonable y menor a 10MB, igualmente normalizamos a JPEG para consistencia de peso
   let canvas = drawToCanvas(source, width, height, maxWidth);
+
   if (isBitmap && source.close) {
-    try { source.close(); } catch {}
+    try {
+      source.close();
+    } catch {}
   }
 
-  // Intento principal
   const canvasToBlob = (c, q) => new Promise((res, rej) => {
     c.toBlob((b) => (b ? res(b) : rej(new Error('toBlob null'))), format, q);
   });
 
   let outBlob = await canvasToBlob(canvas, quality);
-  // Si sigue demasiado grande, aplicar fallbacks
+
   for (const fb of fallbacks) {
     if (outBlob.size <= 10 * 1024 * 1024) break;
+
     canvas = drawToCanvas(canvas, canvas.width, canvas.height, fb.maxWidth);
     outBlob = await canvasToBlob(canvas, fb.quality);
   }
 
-  // Nombre derivado
   const base = (file.name || 'image').replace(/\.[a-z0-9]+$/i, '');
   const outName = `${base}-opt.jpg`;
 
   return blobToFile(outBlob, outName, 'image/jpeg');
 }
 
-
 async function optimizeMany(files, opts) {
   const arr = Array.from(files || []);
   const out = [];
+
   for (const f of arr) {
-    try { out.push(await optimizeImage(f, opts)); } catch { out.push(f); }
+    try {
+      out.push(await optimizeImage(f, opts));
+    } catch {
+      out.push(f);
+    }
   }
+
   return out;
 }
 
-/* =============================
-   GlassSelect (JSX/JS puro)
-============================= */
-const GlassSelect = ({ value, onChange, options, placeholder = 'Selecciona…', disabled = false, ariaLabel }) => {
+const GlassSelect = ({
+  value,
+  onChange,
+  options,
+  placeholder = 'Selecciona...',
+  disabled = false,
+  ariaLabel
+}) => {
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const [panelPos, setPanelPos] = useState({ top: 0, left: 0, width: 280 });
@@ -136,39 +139,72 @@ const GlassSelect = ({ value, onChange, options, placeholder = 'Selecciona…', 
 
   useEffect(() => {
     if (!open) return;
-    const idx = options.findIndex(o => o.value === value);
+
+    const idx = options.findIndex((o) => o.value === value);
     setActiveIndex(idx >= 0 ? idx : 0);
 
     const rect = triggerRef.current?.getBoundingClientRect?.() || {};
-    const vw = window.innerWidth, vh = window.innerHeight;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
     const width = Math.min(Math.max(rect.width || 280, 260), 520);
     const left = Math.min(Math.max((rect.left || 0), 8), vw - width - 8);
     const topCandidate = (rect.bottom || 0) + 6;
-    setPanelPos({ top: Math.min(topCandidate, vh - 120), left, width });
+
+    setPanelPos({
+      top: Math.min(topCandidate, vh - 120),
+      left,
+      width
+    });
 
     setTimeout(() => panelRef.current?.focus?.(), 0);
-    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+
+    const onKey = (e) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+
     const onResize = () => setOpen(false);
+
     window.addEventListener('keydown', onKey);
     window.addEventListener('resize', onResize);
-    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('resize', onResize); };
+
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('resize', onResize);
+    };
   }, [open, value, options]);
 
-  const handleSelect = (val) => { onChange(val); setOpen(false); triggerRef.current?.focus?.(); };
+  const handleSelect = (val) => {
+    onChange(val);
+    setOpen(false);
+    triggerRef.current?.focus?.();
+  };
 
   const onKeyDownTrigger = (e) => {
     if (disabled) return;
-    if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(true); }
+
+    if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      setOpen(true);
+    }
   };
 
   const onKeyDownPanel = (e) => {
     if (!open) return;
-    if (e.key === 'ArrowDown') { e.preventDefault(); setActiveIndex(i => Math.min(i + 1, options.length - 1)); }
-    else if (e.key === 'ArrowUp') { e.preventDefault(); setActiveIndex(i => Math.max(i - 1, 0)); }
-    else if (e.key === 'Enter') { e.preventDefault(); const opt = options[activeIndex]; if (opt) handleSelect(opt.value); }
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveIndex((i) => Math.min(i + 1, options.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveIndex((i) => Math.max(i - 1, 0));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const opt = options[activeIndex];
+      if (opt) handleSelect(opt.value);
+    }
   };
 
-  const selectedLabel = options.find(o => o.value === value)?.label;
+  const selectedLabel = options.find((o) => o.value === value)?.label;
 
   return (
     <div className={`glass-select ${disabled ? 'disabled' : ''}`}>
@@ -183,7 +219,10 @@ const GlassSelect = ({ value, onChange, options, placeholder = 'Selecciona…', 
         aria-label={ariaLabel || placeholder}
         disabled={disabled}
       >
-        <span className={`selected ${!selectedLabel ? 'placeholder' : ''}`}>{selectedLabel || placeholder}</span>
+        <span className={`selected ${!selectedLabel ? 'placeholder' : ''}`}>
+          {selectedLabel || placeholder}
+        </span>
+
         <svg className="chev" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
           <path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" strokeWidth="2" />
         </svg>
@@ -198,7 +237,11 @@ const GlassSelect = ({ value, onChange, options, placeholder = 'Selecciona…', 
             tabIndex={0}
             ref={panelRef}
             onKeyDown={onKeyDownPanel}
-            style={{ top: panelPos.top, left: panelPos.left, width: panelPos.width }}
+            style={{
+              top: panelPos.top,
+              left: panelPos.left,
+              width: panelPos.width
+            }}
             onClick={(e) => e.stopPropagation()}
           >
             {options.length === 0 ? (
@@ -206,6 +249,7 @@ const GlassSelect = ({ value, onChange, options, placeholder = 'Selecciona…', 
             ) : options.map((opt, idx) => {
               const isSel = value === opt.value;
               const isAct = idx === activeIndex;
+
               return (
                 <div
                   key={String(opt.value) + idx}
@@ -216,7 +260,7 @@ const GlassSelect = ({ value, onChange, options, placeholder = 'Selecciona…', 
                   onClick={() => handleSelect(opt.value)}
                 >
                   <span className="label">{opt.label}</span>
-                  {isSel && <span className="check">✓</span>}
+                  {isSel && <span className="check">Seleccionado</span>}
                 </div>
               );
             })}
@@ -228,15 +272,11 @@ const GlassSelect = ({ value, onChange, options, placeholder = 'Selecciona…', 
   );
 };
 
-/* =============================
-   Helpers
-============================= */
 const norm = (s) => String(s || '')
   .normalize('NFD')
   .replace(/[\u0300-\u036f]/g, '')
   .toLowerCase();
 
-/* Número animado para contadores */
 const useAnimatedNumber = (value, duration = 500) => {
   const [display, setDisplay] = useState(value);
   const rafRef = useRef(null);
@@ -250,73 +290,158 @@ const useAnimatedNumber = (value, duration = 500) => {
       const t = Math.min(1, (now - start) / duration);
       const eased = t * (2 - t);
       const v = Math.round(from + (to - from) * eased);
+
       setDisplay(v);
-      if (t < 1) rafRef.current = requestAnimationFrame(step);
+
+      if (t < 1) {
+        rafRef.current = requestAnimationFrame(step);
+      }
     };
 
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+    }
+
     rafRef.current = requestAnimationFrame(step);
-    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
+    return () => {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+      }
+    };
   }, [value, duration]);
 
   return display;
 };
 
-/* Hook: detectar móvil / pointer grueso */
 const useIsMobile = () => {
   const [isMobile, setIsMobile] = useState(false);
+
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 560px), (pointer: coarse)');
     const update = () => setIsMobile(mq.matches);
+
     update();
-    mq.addEventListener ? mq.addEventListener('change', update) : mq.addListener(update);
-    return () => { mq.removeEventListener ? mq.removeEventListener('change', update) : mq.removeListener(update); };
+
+    if (mq.addEventListener) {
+      mq.addEventListener('change', update);
+    } else {
+      mq.addListener(update);
+    }
+
+    return () => {
+      if (mq.removeEventListener) {
+        mq.removeEventListener('change', update);
+      } else {
+        mq.removeListener(update);
+      }
+    };
   }, []);
+
   return isMobile;
 };
 
-/* Generar un nuevo ID de sesión para aislar flujos */
-const newSessionId = () => {
-  return 'S' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
-};
 
-/* Llamada al backend para barrer por sesionId */
+function obtenerUbicacionActual() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error('geolocation_unavailable'));
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(resolve, reject, {
+      enableHighAccuracy: true,
+      timeout: 15000,
+      maximumAge: 60000
+    });
+  });
+}
+
+function normalizarUbicacion(position) {
+  const coords = position?.coords || {};
+  const latitud = Number(coords.latitude);
+  const longitud = Number(coords.longitude);
+
+  if (!Number.isFinite(latitud) || !Number.isFinite(longitud)) {
+    return null;
+  }
+
+  return {
+    latitud,
+    longitud,
+    precision: Number.isFinite(Number(coords.accuracy)) ? Number(coords.accuracy) : null,
+    altitud: Number.isFinite(Number(coords.altitude)) ? Number(coords.altitude) : null,
+    precisionAltitud: Number.isFinite(Number(coords.altitudeAccuracy)) ? Number(coords.altitudeAccuracy) : null,
+    fechaCaptura: new Date(position.timestamp || Date.now()).toISOString(),
+    mapsUrl: `https://www.google.com/maps?q=${latitud},${longitud}`,
+    geoOrigen: 'browser'
+  };
+}
+
+function getMensajeGeoError(error) {
+  if (error?.message === 'geolocation_unavailable') {
+    return 'Este dispositivo no tiene geolocalizacion disponible.';
+  }
+
+  if (error?.code === 1) {
+    return 'Permiso de ubicacion denegado. El informe se puede generar sin GPS.';
+  }
+
+  if (error?.code === 2) {
+    return 'No se pudo obtener la ubicacion actual. Revisa el GPS del dispositivo.';
+  }
+
+  if (error?.code === 3) {
+    return 'La ubicacion tardo demasiado. Puedes intentar nuevamente.';
+  }
+
+  return 'No se pudo obtener la ubicacion.';
+}
+
 async function serverResetSession(curId) {
   if (!curId) return;
+
   try {
-    await fetch(`${API_BASE}/pdf/session/reset/${encodeURIComponent(curId)}`, { method: 'POST' });
+    await http.post(`/pdf/session/reset/${encodeURIComponent(curId)}`);
   } catch (e) {
-    console.error('No se pudo resetear la sesión en servidor:', e);
+    console.error('No se pudo resetear la sesion en servidor:', e);
   }
 }
 
-/* =============================
-   DashboardPage (JSX)
-============================= */
+function limpiarSesionLocal() {
+  localStorage.removeItem('token');
+  localStorage.removeItem('sesionId');
+  localStorage.removeItem('nombreTecnico');
+  localStorage.removeItem('isAdmin');
+  localStorage.removeItem('userId');
+  localStorage.removeItem('usuario');
+  localStorage.removeItem('rol');
+  localStorage.removeItem('dashStep');
+  localStorage.removeItem('numeroIncidencia');
+}
+
 const DashboardPage = () => {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
 
-  /* Paso y estados */
   const [step, setStep] = useState(() => {
     const v = Number(localStorage.getItem('dashStep') || 1);
     return Number.isFinite(v) && v >= 1 && v <= 5 ? v : 1;
   });
 
-  // sesionId como estado (para poder rotarlo al reiniciar flujo)
   const [sesionId, setSesionId] = useState(() => localStorage.getItem('sesionId') || '');
   const [numeroIncidencia, setNumeroIncidencia] = useState(() => localStorage.getItem('numeroIncidencia') || '');
-  const nombreTecnico = localStorage.getItem('nombreTecnico') || 'Técnico';
-  const isAdmin = (sesionId || '').toLowerCase() === 'admin';
+  const token = localStorage.getItem('token') || '';
+  const nombreTecnico = localStorage.getItem('nombreTecnico') || 'Tecnico';
+  const isAdmin = localStorage.getItem('isAdmin') === '1' || localStorage.getItem('isAdmin') === 'true';
 
   const [imagen, setImagen] = useState(null);
+  const [imagenesEvidencia, setImagenesEvidencia] = useState([]);
   const [tipo, setTipo] = useState('previa');
   const [observacion, setObservacion] = useState('');
 
   const [cntPrevias, setCntPrevias] = useState(0);
   const [cntPosteriores, setCntPosteriores] = useState(0);
-
   const [bumpPrev, setBumpPrev] = useState(false);
   const [bumpPost, setBumpPost] = useState(false);
 
@@ -340,6 +465,9 @@ const DashboardPage = () => {
   const [genLoading, setGenLoading] = useState(false);
   const [genUrl, setGenUrl] = useState('');
   const [genErr, setGenErr] = useState('');
+  const [geoStatus, setGeoStatus] = useState('idle');
+  const [geoMessage, setGeoMessage] = useState('');
+  const [geolocalizacion, setGeolocalizacion] = useState(null);
 
   const [tiendas, setTiendas] = useState([]);
   const [selectedTienda, setSelectedTienda] = useState('');
@@ -347,229 +475,370 @@ const DashboardPage = () => {
   const [filtroDepartamento, setFiltroDepartamento] = useState('');
   const [filtroCiudad, setFiltroCiudad] = useState('');
   const [searchText, setSearchText] = useState('');
+  const [tiendaSuggestOpen, setTiendaSuggestOpen] = useState(false);
 
-  /* Guardas / navegación */
-  useEffect(() => { if (!sesionId) navigate('/'); }, [navigate, sesionId]);
-  useEffect(() => { localStorage.setItem('dashStep', String(step)); }, [step]);
-  useEffect(() => { localStorage.setItem('numeroIncidencia', numeroIncidencia || ''); }, [numeroIncidencia]);
-
-  /* Montaje: asegurar estado limpio (por si venía de otra ruta) */
   useEffect(() => {
-    if (pdfRef.current) pdfRef.current.value = '';
-    if (imgsRef.current) imgsRef.current.value = '';
-    if (evidenciaRef.current) evidenciaRef.current.value = '';
-    if (pdfPreviewUrl) { URL.revokeObjectURL(pdfPreviewUrl); setPdfPreviewUrl(null); }
-    if (imgPreviewUrl) { URL.revokeObjectURL(imgPreviewUrl); setImgPreviewUrl(null);
+    if (!token || !sesionId) {
+      navigate('/');
+    }
+  }, [navigate, token, sesionId]);
 
-    setNumeroIncidencia('');
-    localStorage.removeItem('numeroIncidencia');
-    setSelectedTienda(''); }
-    if (evidPreviewUrl) { URL.revokeObjectURL(evidPreviewUrl); setEvidPreviewUrl(null); }
-    setImagen(null);
-    setActa(null);
-    setActaImgs([]);
-    setActaOK(false);
-    setGenLoading(false);
-    setGenUrl('');
-    setGenErr('');
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  useEffect(() => {
+    localStorage.setItem('dashStep', String(step));
+  }, [step]);
 
-  /* Cargar tiendas */
+  useEffect(() => {
+    localStorage.setItem('numeroIncidencia', numeroIncidencia || '');
+  }, [numeroIncidencia]);
+
   useEffect(() => {
     const fetchTiendas = async () => {
       try {
-        const res = await axios.get(`${API_BASE}/tiendas`);
-        setTiendas(Array.isArray(res.data) ? res.data : []);
+        const data = await http.get('/tiendas');
+        const lista = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
+        setTiendas(lista);
       } catch (error) {
         console.error('Error al obtener tiendas del backend:', error);
         setTiendas([]);
       }
     };
+
     fetchTiendas();
   }, []);
 
-  /* Derivados */
   const regionales = useMemo(() => {
-    const set = new Set(tiendas.map(t => (t?.regional ?? '').toString().trim()).filter(Boolean));
+    const set = new Set(
+      tiendas
+        .map((t) => (t?.regional ?? '').toString().trim())
+        .filter(Boolean)
+    );
+
     return [...set].sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
   }, [tiendas]);
 
   const ciudades = useMemo(() => {
-    const base = filtroRegional ? tiendas.filter(t => (t?.regional ?? '').trim() === filtroRegional) : tiendas;
-    const set = new Set(base.map(t => (t?.ciudad ?? '').toString().trim()).filter(Boolean));
+    const base = filtroRegional
+      ? tiendas.filter((t) => (t?.regional ?? '').trim() === filtroRegional)
+      : tiendas;
+
+    const set = new Set(
+      base
+        .map((t) => (t?.ciudad ?? '').toString().trim())
+        .filter(Boolean)
+    );
+
     return [...set].sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
   }, [tiendas, filtroRegional]);
 
   const departamentos = useMemo(() => {
     let base = tiendas;
-    if (filtroRegional) base = base.filter(t => (t?.regional ?? '').trim() === filtroRegional);
-    if (filtroCiudad) base = base.filter(t => (t?.ciudad ?? '').trim() === filtroCiudad);
-    const set = new Set(base.map(t => (t?.departamento ?? '').toString().trim()).filter(Boolean));
+
+    if (filtroRegional) {
+      base = base.filter((t) => (t?.regional ?? '').trim() === filtroRegional);
+    }
+
+    if (filtroCiudad) {
+      base = base.filter((t) => (t?.ciudad ?? '').trim() === filtroCiudad);
+    }
+
+    const set = new Set(
+      base
+        .map((t) => (t?.departamento ?? '').toString().trim())
+        .filter(Boolean)
+    );
+
     return [...set].sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
   }, [tiendas, filtroRegional, filtroCiudad]);
 
   const filteredTiendas = useMemo(() => {
     const q = norm(searchText);
+
     return tiendas
-      .filter(t => {
+      .filter((t) => {
         const okReg = filtroRegional ? (t?.regional ?? '').trim() === filtroRegional : true;
         const okCity = filtroCiudad ? (t?.ciudad ?? '').trim() === filtroCiudad : true;
         const okDept = filtroDepartamento ? (t?.departamento ?? '').trim() === filtroDepartamento : true;
+
         if (!(okReg && okCity && okDept)) return false;
         if (!q) return true;
-        const hay = [t?.nombre, t?.ciudad, t?.departamento, t?.regional].map(norm).some(s => s.includes(q));
-        return hay;
+
+        return [t?.nombre, t?.ciudad, t?.departamento, t?.regional]
+          .map(norm)
+          .some((s) => s.includes(q));
       })
       .sort((a, b) => (a?.nombre || '').localeCompare((b?.nombre || ''), 'es', { sensitivity: 'base' }));
   }, [tiendas, filtroRegional, filtroCiudad, filtroDepartamento, searchText]);
 
+  const selectedTiendaObj = useMemo(() => {
+    return tiendas.find((t) => t._id === selectedTienda) || null;
+  }, [tiendas, selectedTienda]);
+
+  const tiendaSuggestions = useMemo(() => {
+    return filteredTiendas.slice(0, isMobile ? 8 : 10);
+  }, [filteredTiendas, isMobile]);
+
+  const showTiendaSuggestions =
+    step === 2 &&
+    tiendaSuggestOpen &&
+    String(searchText || '').trim().length > 0;
+
+  const seleccionarTiendaSugerida = (tienda) => {
+    if (!tienda?._id || step > 2) return;
+
+    setSelectedTienda(tienda._id);
+    setSearchText(tienda.nombre || '');
+    setTiendaSuggestOpen(false);
+    setCntPrevias(0);
+    setCntPosteriores(0);
+    setActaOK(false);
+  };
+
   useEffect(() => {
-    if (selectedTienda && !filteredTiendas.some(t => t._id === selectedTienda)) setSelectedTienda('');
+    if (selectedTienda && !filteredTiendas.some((t) => t._id === selectedTienda)) {
+      setSelectedTienda('');
+    }
   }, [filteredTiendas, selectedTienda]);
 
-  /* Previews */
-  useEffect(() => () => { if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl); }, [pdfPreviewUrl]);
+  useEffect(() => {
+    return () => {
+      if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl);
+    };
+  }, [pdfPreviewUrl]);
+
   useEffect(() => {
     if (!acta) {
       if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl);
       setPdfPreviewUrl(null);
       return;
     }
-    const url = URL.createObjectURL(acta);
-    if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl);
-    setPdfPreviewUrl(url);
-  }, [acta]); // eslint-disable-line
 
-  useEffect(() => () => { if (imgPreviewUrl) URL.revokeObjectURL(imgPreviewUrl); }, [imgPreviewUrl]);
+    const url = URL.createObjectURL(acta);
+
+    if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl);
+
+    setPdfPreviewUrl(url);
+  }, [acta]);
+
+  useEffect(() => {
+    return () => {
+      if (imgPreviewUrl) URL.revokeObjectURL(imgPreviewUrl);
+    };
+  }, [imgPreviewUrl]);
+
   useEffect(() => {
     if (!actaImgs || actaImgs.length === 0) {
       if (imgPreviewUrl) URL.revokeObjectURL(imgPreviewUrl);
       setImgPreviewUrl(null);
       return;
     }
+
     const first = actaImgs[0];
+
     if (first && first.type?.startsWith('image/')) {
       const url = URL.createObjectURL(first);
+
       if (imgPreviewUrl) URL.revokeObjectURL(imgPreviewUrl);
+
       setImgPreviewUrl(url);
     } else {
       if (imgPreviewUrl) URL.revokeObjectURL(imgPreviewUrl);
       setImgPreviewUrl(null);
     }
-  }, [actaImgs]); // eslint-disable-line
+  }, [actaImgs]);
 
-  useEffect(() => () => { if (evidPreviewUrl) URL.revokeObjectURL(evidPreviewUrl); }, [evidPreviewUrl]);
+  useEffect(() => {
+    return () => {
+      if (evidPreviewUrl) URL.revokeObjectURL(evidPreviewUrl);
+    };
+  }, [evidPreviewUrl]);
+
   useEffect(() => {
     if (!imagen) {
       if (evidPreviewUrl) URL.revokeObjectURL(evidPreviewUrl);
       setEvidPreviewUrl(null);
       return;
     }
+
     if (imagen && imagen.type?.startsWith('image/')) {
       const url = URL.createObjectURL(imagen);
+
       if (evidPreviewUrl) URL.revokeObjectURL(evidPreviewUrl);
+
       setEvidPreviewUrl(url);
     } else {
       if (evidPreviewUrl) URL.revokeObjectURL(evidPreviewUrl);
       setEvidPreviewUrl(null);
     }
-  }, [imagen]); // eslint-disable-line
+  }, [imagen]);
 
-  /* Contadores animados */
   const animPrev = useAnimatedNumber(cntPrevias, 450);
   const animPost = useAnimatedNumber(cntPosteriores, 450);
-  useEffect(() => { if (cntPrevias >= 0) { setBumpPrev(true); const t = setTimeout(() => setBumpPrev(false), 340); return () => clearTimeout(t); } }, [cntPrevias]);
-  useEffect(() => { if (cntPosteriores >= 0) { setBumpPost(true); const t = setTimeout(() => setBumpPost(false), 340); return () => clearTimeout(t); } }, [cntPosteriores]);
 
-  /* Acciones y limpieza (cliente) */
-  const limpiarFiltros = () => { setFiltroRegional(''); setFiltroDepartamento(''); setFiltroCiudad(''); setSearchText(''); setSelectedTienda(''); };
+  useEffect(() => {
+    if (cntPrevias >= 0) {
+      setBumpPrev(true);
+      const t = setTimeout(() => setBumpPrev(false), 340);
+      return () => clearTimeout(t);
+    }
+  }, [cntPrevias]);
+
+  useEffect(() => {
+    if (cntPosteriores >= 0) {
+      setBumpPost(true);
+      const t = setTimeout(() => setBumpPost(false), 340);
+      return () => clearTimeout(t);
+    }
+  }, [cntPosteriores]);
+
+  const limpiarFiltros = () => {
+    setFiltroRegional('');
+    setFiltroDepartamento('');
+    setFiltroCiudad('');
+    setSearchText('');
+    setSelectedTienda('');
+    setTiendaSuggestOpen(false);
+  };
 
   const clearEvid = (e) => {
     e?.stopPropagation?.();
     setImagen(null);
+    setImagenesEvidencia([]);
+
     if (evidenciaRef.current) evidenciaRef.current.value = '';
-    if (evidPreviewUrl) { URL.revokeObjectURL(evidPreviewUrl); setEvidPreviewUrl(null); }
+
+    if (evidPreviewUrl) {
+      URL.revokeObjectURL(evidPreviewUrl);
+      setEvidPreviewUrl(null);
+    }
   };
 
   const clearPdf = (e, opts = {}) => {
     e?.stopPropagation?.();
+
     const keepStatus = !!opts.keepStatus;
+
     setActa(null);
+
     if (!keepStatus) setActaOK(false);
+
     if (pdfRef.current) pdfRef.current.value = '';
-    if (pdfPreviewUrl) { URL.revokeObjectURL(pdfPreviewUrl); setPdfPreviewUrl(null); }
+
+    if (pdfPreviewUrl) {
+      URL.revokeObjectURL(pdfPreviewUrl);
+      setPdfPreviewUrl(null);
+    }
   };
 
   const clearImgs = (e, opts = {}) => {
     e?.stopPropagation?.();
+
     const keepStatus = !!opts.keepStatus;
+
     setActaImgs([]);
+
     if (!keepStatus) setActaOK(false);
+
     if (imgsRef.current) imgsRef.current.value = '';
-    if (imgPreviewUrl) { URL.revokeObjectURL(imgPreviewUrl); setImgPreviewUrl(null); }
+
+    if (imgPreviewUrl) {
+      URL.revokeObjectURL(imgPreviewUrl);
+      setImgPreviewUrl(null);
+    }
   };
 
-  /* =============================
-     Subidas
-     - Evidencia: optimización AL SELECCIONAR (previsualizas la optimizada)
-     - Acta (imágenes): optimización justo ANTES de subir en handleSubirActa
-  ============================== */
-
-  // Maneja selección de evidencia y comprime antes de setear en estado
   const onSelectEvidencia = async (e) => {
-    const file = e.target.files && e.target.files[0] ? e.target.files[0] : null;
-    if (!file) { setImagen(null); return; }
-    if (!file.type?.startsWith('image/')) {
-      setMensaje('El archivo seleccionado no es una imagen');
+    const files = Array.from(e.target.files || []);
+
+    if (files.length === 0) {
       setImagen(null);
+      setImagenesEvidencia([]);
       return;
     }
+
+    const invalidas = files.filter((file) => !file.type?.startsWith('image/'));
+
+    if (invalidas.length > 0) {
+      setMensaje('Todos los archivos seleccionados deben ser imagenes');
+      setImagen(null);
+      setImagenesEvidencia([]);
+      return;
+    }
+
     try {
-      setMensaje('Optimizando imagen…');
-      const optimized = await optimizeImage(file, {
+      setMensaje(files.length > 1 ? `Optimizando ${files.length} imagenes...` : 'Optimizando imagen...');
+
+      const optimized = await optimizeMany(files, {
         maxWidth: 1600,
         quality: 0.75,
         format: 'image/jpeg',
         fallbacks: [{ maxWidth: 1280, quality: 0.7 }]
       });
-      setImagen(optimized);
-      setMensaje('');
+
+      setImagenesEvidencia(optimized);
+      setImagen(optimized[0] || null);
+      setMensaje(files.length > 1 ? `${files.length} imagenes listas para subir` : '');
     } catch (err) {
       console.error(err);
-      setMensaje('No se pudo optimizar la imagen. Se intentará subir el archivo original.');
-      setImagen(file);
+      setMensaje('No se pudieron optimizar las imagenes. Se intentara subir los archivos originales.');
+      setImagenesEvidencia(files);
+      setImagen(files[0] || null);
     }
   };
 
   const handleSubirImagen = async (e) => {
     e.preventDefault();
-    if (!imagen || !tipo || !selectedTienda) { setMensaje('Por favor completa todos los campos.'); return; }
 
-    const formData = new FormData();
-    formData.append('imagen', imagen);
-    formData.append('tipo', tipo);
-    formData.append('sesionId', sesionId);
-    formData.append('ubicacion', selectedTienda);
-    formData.append('observacion', observacion);
+    const imagenesParaSubir = imagenesEvidencia.length > 0 ? imagenesEvidencia : imagen ? [imagen] : [];
+
+    if (imagenesParaSubir.length === 0 || !tipo || !selectedTienda) {
+      setMensaje('Por favor completa todos los campos.');
+      return;
+    }
 
     const tipoEnviado = tipo;
+
     setCargando(true);
+    setMensaje(imagenesParaSubir.length > 1 ? `Subiendo ${imagenesParaSubir.length} imagenes...` : 'Subiendo imagen...');
+
     try {
-      const res = await fetch(`${API_BASE}/imagenes/subir`, { method: 'POST', body: formData });
-      const data = await res.json();
-      if (res.ok) {
-        if (tipoEnviado === 'previa') setCntPrevias(x => x + 1);
-        else setCntPosteriores(x => x + 1);
+      let subidas = 0;
+
+      for (const img of imagenesParaSubir) {
+        const formData = new FormData();
+
+        formData.append('imagen', img);
+        formData.append('tipo', tipoEnviado);
+        formData.append('sesionId', sesionId);
+        formData.append('ubicacion', selectedTienda);
+        formData.append('observacion', observacion);
+
+        await http.post('/imagenes/subir', formData);
+        subidas += 1;
       }
-      setMensaje(data.mensaje || (res.ok ? 'Imagen y observación enviadas correctamente' : 'Error al subir la imagen'));
-      setImagen(null); setObservacion('');
-      if (evidenciaRef.current) evidenciaRef.current.value = '';
+
+      if (tipoEnviado === 'previa') {
+        setCntPrevias((x) => x + subidas);
+      } else {
+        setCntPosteriores((x) => x + subidas);
+      }
+
+      setMensaje(
+        subidas === 1
+          ? 'Imagen y observacion enviadas correctamente'
+          : `${subidas} imagenes ${tipoEnviado === 'previa' ? 'previas' : 'posteriores'} enviadas correctamente`
+      );
+
       setTipo(tipoEnviado === 'previa' ? 'posterior' : 'previa');
+      setImagen(null);
+      setImagenesEvidencia([]);
+      setObservacion('');
+
+      if (evidenciaRef.current) evidenciaRef.current.value = '';
+
       setTimeout(() => setMensaje(''), 3000);
     } catch (error) {
       console.error(error);
-      setMensaje('Error al subir la imagen');
+      setMensaje(error?.response?.data?.mensaje || error?.response?.data?.error || 'Error al subir la imagen');
     } finally {
       setCargando(false);
     }
@@ -577,17 +846,25 @@ const DashboardPage = () => {
 
   const handleSubirActa = async (e) => {
     e.preventDefault();
-    if (!acta && actaImgs.length === 0) { setMensajeActa('Selecciona un PDF o una imagen del acta'); return; }
+
+    if (!acta && actaImgs.length === 0) {
+      setMensajeActa('Selecciona un PDF o una imagen del acta');
+      return;
+    }
 
     const formData = new FormData();
     formData.append('sesionId', sesionId);
-    if (acta) formData.append('acta', acta);
 
-    // Optimización SOLO para imágenes del acta en el momento de subir
+    if (acta) {
+      formData.append('acta', acta);
+    }
+
     let imgsParaSubir = actaImgs;
+
     if (actaImgs.length > 0) {
       try {
-        setMensajeActa('Optimizando imágenes del acta…');
+        setMensajeActa('Optimizando imagenes del acta...');
+
         imgsParaSubir = await optimizeMany(actaImgs, {
           maxWidth: 1600,
           quality: 0.75,
@@ -595,123 +872,220 @@ const DashboardPage = () => {
           fallbacks: [{ maxWidth: 1280, quality: 0.7 }]
         });
       } catch (err) {
-        console.error('Fallo optimizando imágenes del acta:', err);
+        console.error('Fallo optimizando imagenes del acta:', err);
       }
     }
-    imgsParaSubir.forEach(img => formData.append('imagenes', img));
+
+    imgsParaSubir.forEach((img) => formData.append('imagenes', img));
 
     setCargandoActa(true);
+
     try {
-      const res = await fetch(`${API_BASE}/acta/subir`, { method: 'POST', body: formData });
-      const data = await res.json();
-      setMensajeActa(data?.mensaje || (res.ok ? 'Archivo(s) subido(s) correctamente' : 'Error al subir'));
-      if (res.ok) {
-        clearPdf(null, { keepStatus: true });
-        clearImgs(null, { keepStatus: true });
-        setActaOK(true);
-      }
+      const data = await http.post('/acta/subir', formData);
+
+      setMensajeActa(data?.mensaje || 'Archivo subido correctamente');
+      clearPdf(null, { keepStatus: true });
+      clearImgs(null, { keepStatus: true });
+      setActaOK(true);
       setTimeout(() => setMensajeActa(''), 3000);
     } catch (error) {
       console.error(error);
-      setMensajeActa('Error en la conexión con el servidor');
+      setMensajeActa(error?.response?.data?.mensaje || error?.response?.data?.error || 'Error en la conexion con el servidor');
     } finally {
       setCargandoActa(false);
     }
   };
 
-  /* Generar PDF */
-  const handleGenerarPDF = async () => {
-    if (!numeroIncidencia || !String(numeroIncidencia).trim()) { window.alert('Ingresa la incidencia antes de generar el PDF.'); return; }
-    if (!selectedTienda) { window.alert('Selecciona una tienda antes de generar el PDF.'); return; }
-    if (cntPrevias < 1 || cntPosteriores < 1) { window.alert('Debes subir al menos 1 imagen PREVIA y 1 POSTERIOR para generar el informe.'); return; }
+  const solicitarGeolocalizacion = async () => {
+    if (!navigator.geolocation) {
+      setGeoStatus('unavailable');
+      setGeoMessage('Este dispositivo no tiene geolocalizacion disponible.');
+      return null;
+    }
 
-    setGenErr(''); setGenUrl(''); setGenLoading(true);
+    if (!window.isSecureContext && window.location.hostname !== 'localhost') {
+      setGeoStatus('unavailable');
+      setGeoMessage('La geolocalizacion requiere HTTPS para funcionar.');
+      return null;
+    }
+
+    setGeoStatus('loading');
+    setGeoMessage('Solicitando ubicacion GPS...');
+
     try {
-      const inc = encodeURIComponent(String(numeroIncidencia).trim());
-      const jsonUrl = `${API_BASE}/pdf/generar/${sesionId}?tiendaId=${selectedTienda}&format=json&numeroIncidencia=${inc}`;
-      const res = await fetch(jsonUrl, { headers: { Accept: 'application/json' } });
-      if (!res.ok) throw new Error('No se pudo obtener el enlace del informe');
-      const data = await res.json();
+      const position = await obtenerUbicacionActual();
+      const geo = normalizarUbicacion(position);
+
+      if (!geo) {
+        setGeoStatus('error');
+        setGeoMessage('No se pudo leer la ubicacion del dispositivo.');
+        return null;
+      }
+
+      const precisionTexto =
+        geo.precision !== null
+          ? `Precision aproximada: ${Math.round(geo.precision)} m`
+          : 'Ubicacion capturada correctamente';
+
+      setGeolocalizacion(geo);
+      setGeoStatus('ready');
+      setGeoMessage(precisionTexto);
+
+      return geo;
+    } catch (error) {
+      console.error('Error obteniendo geolocalizacion:', error);
+
+      const msg = getMensajeGeoError(error);
+
+      setGeoStatus('error');
+      setGeoMessage(msg);
+
+      return null;
+    }
+  };
+
+  const handleGenerarPDF = async () => {
+    if (!numeroIncidencia || !String(numeroIncidencia).trim()) {
+      window.alert('Ingresa la incidencia antes de generar el PDF.');
+      return;
+    }
+
+    if (!selectedTienda) {
+      window.alert('Selecciona una tienda antes de generar el PDF.');
+      return;
+    }
+
+    if (cntPrevias < 1 || cntPosteriores < 1) {
+      window.alert('Debes subir al menos 1 imagen PREVIA y 1 POSTERIOR para generar el informe.');
+      return;
+    }
+
+    setGenErr('');
+    setGenUrl('');
+    setGenLoading(true);
+
+    try {
+      let geoParaInforme = geolocalizacion;
+
+      if (!geoParaInforme) {
+        geoParaInforme = await solicitarGeolocalizacion();
+      }
+
+      const params = {
+        tiendaId: selectedTienda,
+        format: 'json',
+        numeroIncidencia: String(numeroIncidencia).trim()
+      };
+
+      if (geoParaInforme) {
+        params.latitud = geoParaInforme.latitud;
+        params.longitud = geoParaInforme.longitud;
+        params.precision = geoParaInforme.precision;
+        params.altitud = geoParaInforme.altitud;
+        params.precisionAltitud = geoParaInforme.precisionAltitud;
+        params.fechaCaptura = geoParaInforme.fechaCaptura;
+        params.mapsUrl = geoParaInforme.mapsUrl;
+        params.geoOrigen = geoParaInforme.geoOrigen;
+      }
+
+      const data = await http.get(`/pdf/generar/${encodeURIComponent(sesionId)}`, params);
+
       const cloudUrl = data?.url;
-      if (!cloudUrl) throw new Error('Respuesta sin URL de informe');
+
+      if (!cloudUrl) {
+        throw new Error('Respuesta sin URL de informe');
+      }
+
       setGenUrl(cloudUrl);
     } catch (err) {
       console.error(err);
-      setGenErr('Error al generar/obtener el enlace del informe. Intenta de nuevo.');
+      setGenErr(err?.response?.data?.error || err?.response?.data?.mensaje || 'Error al generar el informe. Intenta de nuevo.');
     } finally {
       setGenLoading(false);
     }
   };
 
-  /* Reiniciar flujo + barrido servidor */
   const resetFlow = async (skipRotate = false) => {
     try {
       await serverResetSession(sesionId);
     } catch (e) {
-      console.error('Fallo al barrer en backend durante resetFlow:', e);
+      console.error('Fallo al limpiar en backend durante resetFlow:', e);
     }
 
     try {
       if (evidenciaRef.current) evidenciaRef.current.value = '';
       if (pdfRef.current) pdfRef.current.value = '';
       if (imgsRef.current) imgsRef.current.value = '';
-      if (evidPreviewUrl) { URL.revokeObjectURL(evidPreviewUrl); }
-      if (pdfPreviewUrl) { URL.revokeObjectURL(pdfPreviewUrl); }
-      if (imgPreviewUrl) { URL.revokeObjectURL(imgPreviewUrl); }
+
+      if (evidPreviewUrl) URL.revokeObjectURL(evidPreviewUrl);
+      if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl);
+      if (imgPreviewUrl) URL.revokeObjectURL(imgPreviewUrl);
     } catch {}
 
     setImagen(null);
+    setImagenesEvidencia([]);
     setActa(null);
     setActaImgs([]);
     setEvidPreviewUrl(null);
     setPdfPreviewUrl(null);
     setImgPreviewUrl(null);
-
     setStep(1);
+    setNumeroIncidencia('');
+    setSelectedTienda('');
+    setSearchText('');
+    setFiltroRegional('');
+    setFiltroDepartamento('');
+    setFiltroCiudad('');
+    setTiendaSuggestOpen(false);
     setCntPrevias(0);
     setCntPosteriores(0);
     setActaOK(false);
     setGenLoading(false);
     setGenUrl('');
     setGenErr('');
+    setGeoStatus('idle');
+    setGeoMessage('');
+    setGeolocalizacion(null);
     setTipo('previa');
     setObservacion('');
+    setMensaje('');
+    setMensajeActa('');
+    localStorage.removeItem('numeroIncidencia');
+    localStorage.setItem('dashStep', '1');
 
     if (!skipRotate) {
-      const next = newSessionId();
-      setSesionId(next);
-      localStorage.setItem('sesionId', next);
+      const current = localStorage.getItem('sesionId') || sesionId;
+      setSesionId(current);
     }
   };
 
-  /* Compartir y cerrar sesión */
   const handleShareWhatsApp = () => {
     if (!genUrl) return;
 
-    const tiendaOptsLocal = filteredTiendas.map(t => ({ value: t._id, label: `${t.nombre} — ${t.regional ? t.regional + ' | ' : ''}${t.departamento}, ${t.ciudad}` }));
-    const tiendaLabel = (tiendaOptsLocal.find(o => o.value === selectedTienda)?.label || '').trim();
-    const texto = `Informe técnico${tiendaLabel ? ` - ${tiendaLabel}` : ''}\n${genUrl}`;
+    const tiendaOptsLocal = filteredTiendas.map((t) => ({
+      value: t._id,
+      label: `${t.nombre} - ${t.regional ? t.regional + ' | ' : ''}${t.departamento}, ${t.ciudad}`
+    }));
+
+    const tiendaLabel = (tiendaOptsLocal.find((o) => o.value === selectedTienda)?.label || '').trim();
+    const texto = `Informe tecnico${tiendaLabel ? ` - ${tiendaLabel}` : ''}\n${genUrl}`;
     const waUrl = `https://wa.me/?text=${encodeURIComponent(texto)}`;
 
     const cleanupAll = async () => {
       try {
-        await serverResetSession(sesionId);
-      } catch (e) {
-        console.error('Fallo barrido backend en compartir:', e);
-      }
-      try {
         await resetFlow(true);
-        localStorage.removeItem('sesionId');
-        localStorage.removeItem('nombreTecnico');
-        localStorage.removeItem('dashStep');
-        localStorage.removeItem('numeroIncidencia');
-      } catch {}
+      } catch (e) {
+        console.error('Fallo limpieza al compartir:', e);
+      }
     };
 
     const popup = window.open(waUrl, '_blank', 'noopener,noreferrer');
+
     if (popup && !popup.closed) {
       popup.opener = null;
-      setTimeout(() => { cleanupAll(); navigate('/'); }, 400);
+      setTimeout(() => {
+        cleanupAll();
+      }, 400);
     } else {
       cleanupAll();
       window.location.href = waUrl;
@@ -722,50 +1096,49 @@ const DashboardPage = () => {
     try {
       await serverResetSession(sesionId);
     } catch (e) {
-      console.error('Fallo barrido backend al cerrar sesión:', e);
+      console.error('Fallo limpieza backend al cerrar sesion:', e);
     }
 
     try {
       if (pdfRef.current) pdfRef.current.value = '';
       if (imgsRef.current) imgsRef.current.value = '';
       if (evidenciaRef.current) evidenciaRef.current.value = '';
-      if (pdfPreviewUrl) { URL.revokeObjectURL(pdfPreviewUrl); }
-      if (imgPreviewUrl) { URL.revokeObjectURL(imgPreviewUrl); }
-      if (evidPreviewUrl) { URL.revokeObjectURL(evidPreviewUrl); }
+
+      if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl);
+      if (imgPreviewUrl) URL.revokeObjectURL(imgPreviewUrl);
+      if (evidPreviewUrl) URL.revokeObjectURL(evidPreviewUrl);
     } catch {}
 
-    setImagen(null); setActa(null); setActaImgs([]); setActaOK(false);
-    setCntPrevias(0); setCntPosteriores(0);
-    setGenLoading(false); setGenUrl(''); setGenErr('');
-    setSelectedTienda(''); setSearchText(''); setFiltroRegional(''); setFiltroDepartamento(''); setFiltroCiudad('');
-    setTipo('previa'); setObservacion('');
+    setImagen(null);
+    setImagenesEvidencia([]);
+    setActa(null);
+    setActaImgs([]);
+    setActaOK(false);
+    setCntPrevias(0);
+    setCntPosteriores(0);
+    setGenLoading(false);
+    setGenUrl('');
+    setGenErr('');
+    setGeoStatus('idle');
+    setGeoMessage('');
+    setGeolocalizacion(null);
+    setSelectedTienda('');
+    setSearchText('');
+    setFiltroRegional('');
+    setFiltroDepartamento('');
+    setFiltroCiudad('');
+    setTipo('previa');
+    setObservacion('');
 
-    localStorage.removeItem('sesionId');
-    localStorage.removeItem('nombreTecnico');
-    localStorage.removeItem('dashStep');
-        localStorage.removeItem('numeroIncidencia');
+    limpiarSesionLocal();
     setSesionId('');
 
     navigate('/');
   };
 
-  /* Opciones */
-  //const departamentosOptions = useMemo(() => [{ value: '', label: 'Todos' }, ...departamentos.map(d => ({ value: d, label: d }))], [departamentos]);
-  //const ciudadesOptions = useMemo(() => [{ value: '', label: 'Todas' }, ...ciudades.map(c => ({ value: c, label: c }))], [ciudades]);
-  const tiendaOptions = useMemo(() => filteredTiendas.map(t => ({ value: t._id, label: `${t.nombre} — ${t.regional ? t.regional + ' | ' : ''}${t.departamento}, ${t.ciudad}` })), [filteredTiendas]);
-  //const tipoOptions = [{ value: 'previa', label: 'Previa' }, { value: 'posterior', label: 'Posterior' }];
-
   const pickPdf = () => pdfRef.current && pdfRef.current.click();
   const pickImgs = () => imgsRef.current && imgsRef.current.click();
   const pickEvid = () => evidenciaRef.current && evidenciaRef.current.click();
-
-  const onSelectTienda = (val) => {
-    if (step > 2) return;
-    setSelectedTienda(val);
-    setCntPrevias(0);
-    setCntPosteriores(0);
-    setActaOK(false);
-  };
 
   const canNextFrom1 = !!(numeroIncidencia && String(numeroIncidencia).trim().length > 0);
   const canNextFrom2 = !!selectedTienda;
@@ -773,734 +1146,1366 @@ const DashboardPage = () => {
   const canNextFrom3 = hasAnyEvidence;
   const canNextFrom4 = actaOK;
 
-  const goNext = () => setStep(s => Math.min(5, s + 1));
-  const goBack = () => setStep(s => Math.max(1, s - 1));
-
-  return (
+  const goNext = () => setStep((s) => Math.min(5, s + 1));
+  const goBack = () => setStep((s) => Math.max(1, s - 1));
+    return (
     <div className="dash-root">
-      <div className="topbar">
-        <div className="hello">Hola, <strong>{nombreTecnico}</strong></div>
-        <div className="actions">
-          {isAdmin && <button className="btn-outline" onClick={() => navigate('/informes')}>Ver Informes</button>}
-          <button className="btn-danger" onClick={handleCerrarSesion}>Cerrar sesión</button>
+      <header className="topbar">
+        <div>
+          <h1>Cubica PDF App</h1>
+          <p>{nombreTecnico}</p>
         </div>
-      </div>
 
-      <div className="content">
-        <div className="stack">
-          <h1 className="title">Dashboard</h1>
+        <div className="top-actions">
+          <button type="button" className="btn ghost" onClick={() => navigate('/informes')}>
+            {isAdmin ? 'Informes' : 'Mis Informes'}
+          </button>
 
-          <div className="stepper card">
-            <div className="steps" role="tablist" aria-label="Progreso">
-              <div className={`step ${step >= 1 ? 'done' : ''} ${step === 1 ? 'current' : ''}`} role="tab" aria-selected={step===1}><span>1</span> Incidencia</div>
-              <div className={`step ${step >= 2 ? 'done' : ''} ${step === 2 ? 'current' : ''}`} role="tab" aria-selected={step===2}><span>2</span> Ubicación</div>
-              <div className={`step ${step >= 3 ? 'done' : ''} ${step === 3 ? 'current' : ''}`} role="tab" aria-selected={step===3}><span>3</span> Evidencias</div>
-              <div className={`step ${step >= 4 ? 'done' : ''} ${step === 4 ? 'current' : ''}`} role="tab" aria-selected={step===4}><span>4</span> Acta</div>
-              <div className={`step ${step >= 5 ? 'done' : ''} ${step === 5 ? 'current' : ''}`} role="tab" aria-selected={step===5}><span>5</span> PDF</div>
-            </div>
+          {isAdmin && (
+            <>
+              <button type="button" className="btn ghost" onClick={() => navigate('/usuarios')}>
+                Usuarios
+              </button>
 
-            <div className="step-quick">
-              <div className="counters">
-                <span className={`badge ${bumpPrev ? 'bump' : ''}`} aria-live="polite" aria-atomic="true">
-                  <span className="dot pre" aria-hidden="true" />
-                  <span className="num">{animPrev}</span> previas
-                </span>
-                <span className={`badge ${bumpPost ? 'bump' : ''}`} aria-live="polite" aria-atomic="true">
-                  <span className="dot post" aria-hidden="true" />
-                  <span className="num">{animPost}</span> posteriores
-                </span>
-              </div>
-              <div>Acta: {actaOK ? 'Lista' : 'Pendiente'}</div>
-              <button type="button" className="btn-outline" onClick={() => resetFlow(false)}>Reiniciar flujo</button>
-            </div>
-          </div>
-
-          {step === 1 && (
-            <div className="card">
-              <h2 className="subtitle">Incidencia</h2>
-
-              <div className="field">
-                <label className="label"><strong>Número de incidencia</strong></label>
-                <div className="incidencia-row">
-                  <input
-                    className="input"
-                    type="text"
-                    inputMode="text"
-                    autoCapitalize="characters"
-                    autoCorrect="off"
-                    placeholder="Ej: 12345"
-                    value={numeroIncidencia}
-                    onChange={(e) => setNumeroIncidencia(e.target.value)}
-                  />
-                  <button
-                    type="button"
-                    className="btn-outline"
-                    onClick={async () => {
-                      try {
-                        const txt = await navigator.clipboard.readText();
-                        if (txt) setNumeroIncidencia(txt);
-                      } catch {
-                        window.alert('No se pudo leer el portapapeles. Pega manualmente.');
-                      }
-                    }}
-                  >
-                    Pegar
-                  </button>
-                </div>
-              </div>
-
-              <div className="filters-actions">
-                <button className="btn-primary" onClick={goNext} disabled={!canNextFrom1}>Continuar</button>
-              </div>
-            </div>
+              <button type="button" className="btn ghost" onClick={() => navigate('/tiendas')}>
+                Tiendas
+              </button>
+            </>
           )}
 
-          {step === 2 && (
+          <button type="button" className="btn danger" onClick={handleCerrarSesion}>
+            Cerrar sesion
+          </button>
+        </div>
+      </header>
 
-            <div className="card">
-              <h2 className="subtitle">Ubicación — Filtros</h2>
+      <main className="dash-container">
+        <section className="hero">
+          <div>
+            <h2>Generacion de informe tecnico</h2>
+            <p>Completa los pasos para generar el PDF con evidencia fotografica.</p>
+          </div>
 
-              <div className="filters-grid">
-                <div className="field" style={{ gridColumn: '1 / -1' }}>
-                  <label className="label">Regional</label>
-                  <GlassSelect
-                    value={filtroRegional}
-                    onChange={(val) => { setFiltroRegional(val); setFiltroCiudad(''); setFiltroDepartamento(''); setSelectedTienda(''); }}
-                    options={[{ value: '', label: 'Selecciona Regional' }, ...regionales.map(r => ({ value: r, label: r }))]}
-                    placeholder="Todas las regionales"
-                    ariaLabel="Filtrar por regional"
-                  />
-                </div>
-                <div className="field">
-                  <label className="label">Ciudad</label>
-                  <GlassSelect
-                    value={filtroCiudad}
-                    onChange={(val) => { setFiltroCiudad(val); setFiltroDepartamento(''); setSelectedTienda(''); }}
-                    options={[{ value: '', label: 'Todas' }, ...ciudades.map(c => ({ value: c, label: c }))]}
-                    placeholder="Todas"
-                    ariaLabel="Filtrar por ciudad"
-                    disabled={!filtroRegional || ciudades.length === 0}
-                  />
-                </div>
-                <div className="field">
-                  <label className="label">Departamento</label>
-                  <GlassSelect
-                    value={filtroDepartamento}
-                    onChange={(val) => { setFiltroDepartamento(val); setSelectedTienda(''); }}
-                    options={[{ value: '', label: 'Todos' }, ...departamentos.map(d => ({ value: d, label: d }))]}
-                    placeholder="Todos"
-                    ariaLabel="Filtrar por departamento"
-                    disabled={!filtroCiudad || departamentos.length === 0}
-                  />
-                </div>
-              </div>
+          <div className="session-chip">
+            <span>Sesion</span>
+            <strong>{sesionId || 'Sin sesion'}</strong>
+          </div>
+        </section>
 
+        <section className="steps">
+          {[1, 2, 3, 4, 5].map((n) => (
+            <div key={n} className={`step-dot ${step === n ? 'active' : ''} ${step > n ? 'done' : ''}`}>
+              <span>{n}</span>
+            </div>
+          ))}
+        </section>
+
+        {step === 1 && (
+          <section className="card step-card">
+            <h3>Numero de incidencia</h3>
+            <p>Ingresa el numero de incidencia que aparecera en el informe.</p>
+
+            <div className="field">
+              <label>Incidencia</label>
+              <input
+                type="text"
+                value={numeroIncidencia}
+                onChange={(e) => setNumeroIncidencia(e.target.value)}
+                placeholder="Ejemplo: 123456"
+              />
+            </div>
+
+            <div className="actions">
+              <button type="button" className="btn primary" disabled={!canNextFrom1} onClick={goNext}>
+                Continuar
+              </button>
+            </div>
+          </section>
+        )}
+
+        {step === 2 && (
+          <section className="card step-card">
+            <h3>Seleccion de tienda</h3>
+            <p>Filtra y selecciona la tienda donde se realizo la instalacion.</p>
+
+            <div className="filters-grid">
               <div className="field">
-                <label className="label">Buscar tienda</label>
-                <input
-                  className="input"
-                  type="search"
-                  inputMode="search"
-                  autoCapitalize="none"
-                  autoCorrect="off"
-                  placeholder="Nombre, ciudad o departamento"
-                  value={searchText}
-                  onChange={(e) => setSearchText(e.target.value)}
-                  disabled={!filtroRegional}
+                <label>Regional</label>
+                <GlassSelect
+                  value={filtroRegional}
+                  onChange={(val) => {
+                    setFiltroRegional(val);
+                    setFiltroDepartamento('');
+                    setFiltroCiudad('');
+                    setSelectedTienda('');
+                  }}
+                  options={[
+                    { value: '', label: 'Todas las regionales' },
+                    ...regionales.map((r) => ({ value: r, label: r }))
+                  ]}
+                  placeholder="Regional"
+                  ariaLabel="Regional"
                 />
               </div>
 
               <div className="field">
-                <label className="label"><strong>Ubicación del D1</strong></label>
-                {isMobile ? (
-                  <select
-                    className="select-native"
-                    value={selectedTienda}
-                    onChange={(e) => onSelectTienda(e.target.value)}
-                    disabled={tiendaOptions.length === 0}
-                    aria-label="Seleccionar tienda (móvil)"
-                  >
-                    <option value="">{`Selecciona una tienda (${filteredTiendas.length})`}</option>
-                    {filteredTiendas.map(t => (
-                      <option key={t._id} value={t._id}>{`${t.nombre} — ${t.regional ? t.regional + ' | ' : ''}${t.departamento}, ${t.ciudad}`}</option>
-                    ))}
-                  </select>
-                ) : (
-                  <GlassSelect
-                    value={selectedTienda}
-                    onChange={onSelectTienda}
-                    options={filteredTiendas.map(t => ({ value: t._id, label: `${t.nombre} — ${t.regional ? t.regional + ' | ' : ''}${t.departamento}, ${t.ciudad}` }))}
-                    placeholder={`Selecciona una tienda (${filteredTiendas.length})`}
-                    ariaLabel="Seleccionar tienda"
-                    disabled={filteredTiendas.length === 0}
-                  />
+                <label>Ciudad</label>
+                <GlassSelect
+                  value={filtroCiudad}
+                  onChange={(val) => {
+                    setFiltroCiudad(val);
+                    setFiltroDepartamento('');
+                    setSelectedTienda('');
+                  }}
+                  options={[
+                    { value: '', label: 'Todas las ciudades' },
+                    ...ciudades.map((c) => ({ value: c, label: c }))
+                  ]}
+                  placeholder="Ciudad"
+                  ariaLabel="Ciudad"
+                />
+              </div>
+
+              <div className="field">
+                <label>Departamento</label>
+                <GlassSelect
+                  value={filtroDepartamento}
+                  onChange={(val) => {
+                    setFiltroDepartamento(val);
+                    setSelectedTienda('');
+                  }}
+                  options={[
+                    { value: '', label: 'Todos los departamentos' },
+                    ...departamentos.map((d) => ({ value: d, label: d }))
+                  ]}
+                  placeholder="Departamento"
+                  ariaLabel="Departamento"
+                />
+              </div>
+            </div>
+
+            <div className="field store-search-field">
+              <label>Buscar y seleccionar tienda</label>
+
+              <div className="autocomplete-box">
+                <input
+                  type="text"
+                  value={searchText}
+                  onChange={(e) => {
+                    setSearchText(e.target.value);
+                    setTiendaSuggestOpen(true);
+                    setSelectedTienda('');
+                  }}
+                  onFocus={() => setTiendaSuggestOpen(true)}
+                  onBlur={() => {
+                    setTimeout(() => setTiendaSuggestOpen(false), 160);
+                  }}
+                  placeholder="Escribe el nombre de la tienda"
+                  autoComplete="off"
+                />
+
+                {showTiendaSuggestions && (
+                  <div className="suggestions-panel">
+                    {tiendaSuggestions.length > 0 ? (
+                      tiendaSuggestions.map((tienda) => (
+                        <button
+                          type="button"
+                          key={tienda._id}
+                          className={`suggestion-item ${selectedTienda === tienda._id ? 'selected' : ''}`}
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => seleccionarTiendaSugerida(tienda)}
+                        >
+                          <strong>{tienda.nombre || 'Tienda sin nombre'}</strong>
+                          <span>
+                            {tienda.regional ? `${tienda.regional} | ` : ''}
+                            {tienda.departamento || 'Sin departamento'}, {tienda.ciudad || 'Sin ciudad'}
+                          </span>
+                        </button>
+                      ))
+                    ) : (
+                      <div className="suggestion-empty">
+                        No se encontraron tiendas con ese nombre
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
 
-              <div className="filters-actions">
-                <div className="hint">{filteredTiendas.length} resultado{filteredTiendas.length === 1 ? '' : 's'}</div>
-                <button type="button" className="btn-outline" onClick={limpiarFiltros}>Limpiar filtros</button>
-              </div>
+              {selectedTiendaObj && (
+                <div className="selected-store">
+                  <span>Tienda seleccionada</span>
+                  <strong>{selectedTiendaObj.nombre}</strong>
+                  <p>
+                    {selectedTiendaObj.regional ? `${selectedTiendaObj.regional} | ` : ''}
+                    {selectedTiendaObj.departamento}, {selectedTiendaObj.ciudad}
+                  </p>
+                </div>
+              )}
+            </div>
 
-              <div className="wizard-actions">
-                <button className="btn" onClick={() => canNextFrom2 && goNext()} disabled={!canNextFrom2}>Continuar</button>
+            <div className="actions between">
+              <button type="button" className="btn secondary" onClick={goBack}>
+                Atras
+              </button>
+
+              <div className="right-actions">
+                <button type="button" className="btn ghost" onClick={limpiarFiltros}>
+                  Limpiar filtros
+                </button>
+
+                <button type="button" className="btn primary" disabled={!canNextFrom2} onClick={goNext}>
+                  Continuar
+                </button>
               </div>
             </div>
-          )}
+          </section>
+        )}
 
-          {step === 3 && (
-            <form onSubmit={handleSubirImagen} className={`card ${cargando ? 'is-busy' : ''}`}>
-              {cargando && <div className="md-progress" aria-hidden="true" />}
-              <h2 className="subtitle">Subir Imagen</h2>
+        {step === 3 && (
+          <section className="card step-card">
+            <h3>Evidencia fotografica</h3>
+            <p>Sube imagenes previas y posteriores de la instalacion.</p>
 
-              <div className="info-row">
-                <div>Tienda: <strong>{filteredTiendas.find(t => t._id === selectedTienda)?.nombre ? `${filteredTiendas.find(t => t._id === selectedTienda)?.nombre} — ${filteredTiendas.find(t => t._id === selectedTienda)?.regional ? filteredTiendas.find(t => t._id === selectedTienda)?.regional + ' | ' : ''}${filteredTiendas.find(t => t._id === selectedTienda)?.departamento}, ${filteredTiendas.find(t => t._id === selectedTienda)?.ciudad}` : 'Sin tienda'}</strong></div>
-                <div className="counters">
-                  <span className={`badge ${bumpPrev ? 'bump' : ''}`}><span className="dot pre" />{animPrev} previas</span>
-                  <span className={`badge ${bumpPost ? 'bump' : ''}`}><span className="dot post" />{animPost} posteriores</span>
-                </div>
+            <div className="counter-grid">
+              <div className={`counter-box ${bumpPrev ? 'bump' : ''}`}>
+                <span>Previas</span>
+                <strong>{animPrev}</strong>
               </div>
 
-              <div className="upload-toggles upload-toggles--center">
-                <button type="button" className="upload-btn" onClick={pickEvid} aria-label="Seleccionar imagen de evidencia">
-                  <span className="thumb-wrap">
-                    {evidPreviewUrl ? (
-                      <span className="thumb-box-lg" aria-label="Imagen de evidencia seleccionada">
-                        <img src={evidPreviewUrl} alt="Previsualización evidencia" className="thumb-img-lg" />
-                        <span
-                          className="clear-x"
-                          role="button"
-                          tabIndex={0}
-                          onClick={(e) => clearEvid(e)}
-                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); clearEvid(e); } }}
-                          aria-label="Quitar imagen"
-                        >×</span>
-                      </span>
-                    ) : (
-                      <span className="icon-slab" aria-hidden="true">
-                        <svg className="upload-icon" viewBox="0 0 48 48">
-                          <path d="M24 30V12" stroke="currentColor" strokeWidth="3" strokeLinecap="round" fill="none"/>
-                          <path d="M17 18l7-8 7 8" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-                          <rect x="12" y="32" width="24" height="6" rx="3" fill="currentColor" opacity=".95"/>
-                        </svg>
-                      </span>
-                    )}
-                  </span>
-                  <span className="upload-label">Subir imagen de evidencia</span>
-                </button>
+              <div className={`counter-box ${bumpPost ? 'bump' : ''}`}>
+                <span>Posteriores</span>
+                <strong>{animPost}</strong>
+              </div>
+            </div>
+
+            <form onSubmit={handleSubirImagen} className="upload-form">
+              <div className="field">
+                <label>Tipo de imagen</label>
+                <GlassSelect
+                  value={tipo}
+                  onChange={setTipo}
+                  options={[
+                    { value: 'previa', label: 'Previa' },
+                    { value: 'posterior', label: 'Posterior' }
+                  ]}
+                  placeholder="Tipo"
+                  ariaLabel="Tipo de imagen"
+                />
+              </div>
+
+              <div className="field">
+                <label>Observacion</label>
+                <textarea
+                  value={observacion}
+                  onChange={(e) => setObservacion(e.target.value)}
+                  placeholder="Describe la evidencia"
+                  rows={4}
+                />
               </div>
 
               <input
                 ref={evidenciaRef}
-                id="evidencia-input"
-                type="file"
-                accept="image/*"
-                style={{ display: 'none' }}
-                required
-                /* Se reemplaza el setImagen directo por compresión previa */
-                onChange={onSelectEvidencia}
-              />
-
-              {imagen && <div className="hint" style={{ marginTop: 10 }}>Imagen: {imagen.name}</div>}
-
-              <div className="field" style={{ marginTop: 10 }}>
-                <label className="label"><strong>Tipo de imagen</strong></label>
-                <GlassSelect
-                  value={tipo}
-                  onChange={(v) => setTipo(v)}
-                  options={[{ value: 'previa', label: 'Previa' }, { value: 'posterior', label: 'Posterior' }]}
-                  placeholder="Selecciona tipo"
-                  ariaLabel="Seleccionar tipo de imagen"
-                />
-              </div>
-
-              <div className="field">
-                <label className="label"><strong>Observación (opcional)</strong></label>
-                <textarea value={observacion} onChange={(e) => setObservacion(e.target.value)} rows={3} className="textarea" />
-              </div>
-
-              <button type="submit" className={`btn ${cargando ? 'is-loading' : ''}`} disabled={cargando}>
-                {cargando ? <span className="md-spinner" aria-label="Cargando" /> : 'Subir Imagen'}
-              </button>
-              {mensaje && <p className="msg">{mensaje}</p>}
-
-              <div className="wizard-actions">
-                <button type="button" className="btn-outline" onClick={goBack}>Regresar</button>
-                <button type="button" className="btn" onClick={() => canNextFrom3 && goNext()} disabled={!canNextFrom3}>Continuar</button>
-              </div>
-            </form>
-          )}
-
-          {step === 4 && (
-            <form onSubmit={handleSubirActa} className={`card ${cargandoActa ? 'is-busy' : ''}`}>
-              {cargandoActa && <div className="md-progress" aria-hidden="true" />}
-              <h2 className="subtitle">Subir Acta</h2>
-
-              <div className="info-row">
-                <div className="counters">
-                  <span className={`badge ${bumpPrev ? 'bump' : ''}`}><span className="dot pre" />{animPrev} previas</span>
-                  <span className={`badge ${bumpPost ? 'bump' : ''}`}><span className="dot post" />{animPost} posteriores</span>
-                </div>
-                <div>Acta: {actaOK ? 'Lista' : 'Pendiente'}</div>
-              </div>
-
-              <div className="upload-toggles">
-                <button type="button" className="upload-btn" onClick={pickPdf} aria-label="Subir acta formato PDF">
-                  <span className="thumb-wrap">
-                    {acta ? (
-                      <span className="thumb-box-lg pdf" aria-label="PDF seleccionado">
-                        <span className="pdf-badge">PDF</span>
-                        <span
-                          className="clear-x"
-                          role="button"
-                          tabIndex={0}
-                          onClick={(e) => clearPdf(e)}
-                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); clearPdf(e); } }}
-                          aria-label="Quitar PDF"
-                        >×</span>
-                      </span>
-                    ) : (
-                      <span className="icon-slab" aria-hidden="true">
-                        <svg className="upload-icon" viewBox="0 0 48 48">
-                          <path d="M24 30V12" stroke="currentColor" strokeWidth="3" strokeLinecap="round" fill="none"/>
-                          <path d="M17 18l7-8 7 8" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-                          <rect x="12" y="32" width="24" height="6" rx="3" fill="currentColor" opacity=".95"/>
-                        </svg>
-                      </span>
-                    )}
-                  </span>
-                  <span className="upload-label">Subir acta formato PDF</span>
-                </button>
-
-                <button type="button" className="upload-btn" onClick={pickImgs} aria-label="Subir acta formato imagen">
-                  <span className="thumb-wrap">
-                    {imgPreviewUrl ? (
-                      <span className="thumb-box-lg" aria-label="Imagen de acta seleccionada">
-                        <img src={imgPreviewUrl} alt="Previsualización acta" className="thumb-img-lg" />
-                        {actaImgs.length > 1 && <span className="thumb-count-lg">+{actaImgs.length - 1}</span>}
-                        <span
-                          className="clear-x"
-                          role="button"
-                          tabIndex={0}
-                          onClick={(e) => clearImgs(e)}
-                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); clearImgs(e); } }}
-                          aria-label="Quitar imágenes"
-                        >×</span>
-                      </span>
-                    ) : (
-                      <span className="icon-slab" aria-hidden="true">
-                        <svg className="upload-icon" viewBox="0 0 48 48">
-                          <path d="M24 30V12" stroke="currentColor" strokeWidth="3" strokeLinecap="round" fill="none"/>
-                          <path d="M17 18l7-8 7 8" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-                          <rect x="12" y="32" width="24" height="6" rx="3" fill="currentColor" opacity=".95"/>
-                        </svg>
-                      </span>
-                    )}
-                  </span>
-                  <span className="upload-label">Subir acta formato imagen</span>
-                </button>
-              </div>
-
-              <input
-                ref={pdfRef}
-                id="pdf-input"
-                type="file"
-                accept="application/pdf"
-                style={{ display: 'none' }}
-                onChange={(e) => setActa(e.target.files && e.target.files[0] ? e.target.files[0] : null)}
-              />
-              <input
-                ref={imgsRef}
-                id="acta-images-input"
                 type="file"
                 accept="image/*"
                 multiple
-                style={{ display: 'none' }}
+                onChange={onSelectEvidencia}
+                className="hidden-input"
+              />
+
+              <div className="file-card" onClick={pickEvid} role="button" tabIndex={0}>
+                {evidPreviewUrl ? (
+                  <img src={evidPreviewUrl} alt="Vista previa evidencia" />
+                ) : (
+                  <div className="file-placeholder">
+                    <strong>Seleccionar imagenes</strong>
+                    <span>
+                      {imagenesEvidencia.length > 0
+                        ? `${imagenesEvidencia.length} imagenes seleccionadas`
+                        : 'JPG, PNG o imagen compatible'}
+                    </span>
+                  </div>
+                )}
+
+                {imagenesEvidencia.length > 1 && (
+                  <div className="file-count">
+                    {imagenesEvidencia.length} imagenes seleccionadas
+                  </div>
+                )}
+
+                {imagenesEvidencia.length > 0 && (
+                  <button type="button" className="file-clear" onClick={clearEvid}>
+                    Quitar
+                  </button>
+                )}
+              </div>
+
+              {mensaje && <p className="message">{mensaje}</p>}
+
+              <div className="actions between">
+                <button type="button" className="btn secondary" onClick={goBack}>
+                  Atras
+                </button>
+
+                <div className="right-actions">
+                  <button type="submit" className="btn primary" disabled={cargando || imagenesEvidencia.length === 0}>
+                    {cargando
+                      ? 'Subiendo...'
+                      : imagenesEvidencia.length > 1
+                        ? 'Subir imagenes'
+                        : 'Subir imagen'}
+                  </button>
+
+                  <button type="button" className="btn primary" disabled={!canNextFrom3} onClick={goNext}>
+                    Continuar
+                  </button>
+                </div>
+              </div>
+            </form>
+          </section>
+        )}
+
+        {step === 4 && (
+          <section className="card step-card">
+            <h3>Acta o soporte</h3>
+            <p>Adjunta un PDF o imagenes del acta si aplica.</p>
+
+            <form onSubmit={handleSubirActa} className="upload-form">
+              <input
+                ref={pdfRef}
+                type="file"
+                accept="application/pdf"
+                className="hidden-input"
+                onChange={(e) => setActa(e.target.files?.[0] || null)}
+              />
+
+              <input
+                ref={imgsRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden-input"
                 onChange={(e) => setActaImgs(Array.from(e.target.files || []))}
               />
 
-              {(acta || actaImgs.length > 0) && (
-                <div className="hint" style={{ marginTop: 10 }}>
-                  {acta ? `PDF: ${acta.name}` : ''}{acta && actaImgs.length > 0 ? ' • ' : ''}{actaImgs.length > 0 ? `${actaImgs.length} imagen${actaImgs.length === 1 ? '' : 'es'}` : ''}
+              <div className="dual-upload">
+                <div className="file-card small" onClick={pickPdf} role="button" tabIndex={0}>
+                  {acta ? (
+                    <div className="file-placeholder selected-file">
+                      <strong>{acta.name}</strong>
+                      <span>PDF seleccionado</span>
+                    </div>
+                  ) : (
+                    <div className="file-placeholder">
+                      <strong>Seleccionar PDF</strong>
+                      <span>Acta en PDF</span>
+                    </div>
+                  )}
+
+                  {acta && (
+                    <button type="button" className="file-clear" onClick={clearPdf}>
+                      Quitar
+                    </button>
+                  )}
                 </div>
+
+                <div className="file-card small" onClick={pickImgs} role="button" tabIndex={0}>
+                  {imgPreviewUrl ? (
+                    <img src={imgPreviewUrl} alt="Vista previa acta" />
+                  ) : (
+                    <div className="file-placeholder">
+                      <strong>Seleccionar imagenes</strong>
+                      <span>{actaImgs.length > 0 ? `${actaImgs.length} imagenes seleccionadas` : 'Acta en imagen'}</span>
+                    </div>
+                  )}
+
+                  {actaImgs.length > 0 && (
+                    <button type="button" className="file-clear" onClick={clearImgs}>
+                      Quitar
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {mensajeActa && <p className="message">{mensajeActa}</p>}
+
+              {actaOK && (
+                <p className="success-message">
+                  Acta cargada correctamente
+                </p>
               )}
 
-              <button type="submit" className={`btn ${cargandoActa ? 'is-loading' : ''}`} disabled={cargandoActa}>
-                {cargandoActa ? <span className="md-spinner" aria-label="Cargando" /> : 'Subir Acta'}
-              </button>
-              {mensajeActa && <p className="msg">{mensajeActa}</p>}
+              <div className="actions between">
+                <button type="button" className="btn secondary" onClick={goBack}>
+                  Atras
+                </button>
 
-              <div className="wizard-actions">
-                <button type="button" className="btn-outline" onClick={goBack}>Regresar</button>
-                <button type="button" className="btn" onClick={() => canNextFrom4 && goNext()} disabled={!canNextFrom4}>Continuar</button>
+                <div className="right-actions">
+                  <button type="submit" className="btn primary" disabled={cargandoActa}>
+                    {cargandoActa ? 'Subiendo...' : 'Subir acta'}
+                  </button>
+
+                  <button type="button" className="btn primary" disabled={!canNextFrom4} onClick={goNext}>
+                    Continuar
+                  </button>
+                </div>
               </div>
             </form>
-          )}
+          </section>
+        )}
 
-          {step === 5 && (
-            <>
-              {!genLoading && !genUrl && !genErr && (
-                <>
-                  <div className="card">
-                    <h2 className="subtitle">Resumen</h2>
-                    <div className="hint">Incidencia: <strong>{String(numeroIncidencia || '').trim()}</strong></div>
-                    <div className="hint">Ubicación: <strong>{filteredTiendas.find(t => t._id === selectedTienda) ? `${filteredTiendas.find(t => t._id === selectedTienda)?.nombre} — ${filteredTiendas.find(t => t._id === selectedTienda)?.regional ? filteredTiendas.find(t => t._id === selectedTienda)?.regional + ' | ' : ''}${filteredTiendas.find(t => t._id === selectedTienda)?.departamento}, ${filteredTiendas.find(t => t._id === selectedTienda)?.ciudad}` : 'Sin tienda'}</strong></div>
-                    <div className="hint">Evidencias: {animPrev} previas · {animPost} posteriores</div>
-                    <div className="hint">Acta: {actaOK ? 'Lista' : 'Pendiente'}</div>
-                    <div className="wizard-actions">
-                      <button type="button" className="btn-outline" onClick={goBack}>Regresar</button>
-                    </div>
-                  </div>
-                  <button onClick={handleGenerarPDF} className="btn-primary" disabled={cntPrevias < 1 || cntPosteriores < 1}>
-                    Generar informe
+        {step === 5 && (
+          <section className="card step-card">
+            <h3>Generar informe</h3>
+            <p>Verifica la informacion y genera el PDF final.</p>
+
+            <div className="summary-grid">
+              <div>
+                <span>Incidencia</span>
+                <strong>{numeroIncidencia || 'Sin incidencia'}</strong>
+              </div>
+
+              <div>
+                <span>Previas</span>
+                <strong>{cntPrevias}</strong>
+              </div>
+
+              <div>
+                <span>Posteriores</span>
+                <strong>{cntPosteriores}</strong>
+              </div>
+
+              <div>
+                <span>Acta</span>
+                <strong>{actaOK ? 'Cargada' : 'Pendiente'}</strong>
+              </div>
+            </div>
+
+            <div className={`geo-box ${geoStatus}`}>
+              <div>
+                <span>Geolocalizacion</span>
+                <strong>
+                  {geolocalizacion
+                    ? `${geolocalizacion.latitud.toFixed(6)}, ${geolocalizacion.longitud.toFixed(6)}`
+                    : 'Sin ubicacion capturada'}
+                </strong>
+                <p>
+                  {geoMessage || 'La ubicacion se solicitara al generar el informe.'}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="btn ghost"
+                onClick={solicitarGeolocalizacion}
+                disabled={geoStatus === 'loading' || genLoading}
+              >
+                {geoStatus === 'loading'
+                  ? 'Solicitando...'
+                  : geolocalizacion
+                    ? 'Actualizar ubicacion'
+                    : 'Capturar ubicacion'}
+              </button>
+            </div>
+
+            {genErr && <p className="error-message">{genErr}</p>}
+
+            {genUrl && (
+              <div className="result-box">
+                <span>Informe generado</span>
+                <a href={genUrl} target="_blank" rel="noreferrer">
+                  Ver PDF
+                </a>
+              </div>
+            )}
+
+            <div className="actions between">
+              <button type="button" className="btn secondary" onClick={goBack}>
+                Atras
+              </button>
+
+              <div className="right-actions">
+                {!genUrl && (
+                  <button type="button" className="btn primary" disabled={genLoading} onClick={handleGenerarPDF}>
+                    {genLoading ? 'Generando...' : 'Generar PDF'}
                   </button>
-                </>
-              )}
+                )}
 
-              {genLoading && (
-                <div className="card is-busy">
-                  <div className="md-progress" aria-hidden="true" />
-                  <h2 className="subtitle">Generando informe</h2>
-                  <div className="loader-wrap">
-                    <div className="md-spinner" aria-label="Cargando" />
-                    <div className="hint" style={{ marginTop: 8 }}>Esto puede tardar unos segundos…</div>
-                  </div>
-                </div>
-              )}
+                {genUrl && (
+                  <>
+                    <button type="button" className="btn primary" onClick={handleShareWhatsApp}>
+                      Compartir por WhatsApp
+                    </button>
 
-              {!genLoading && genErr && (
-                <div className="card">
-                  <h2 className="subtitle">Error</h2>
-                  <p className="msg">{genErr}</p>
-                  <div className="wizard-actions">
-                    <button type="button" className="btn-outline" onClick={() => { setGenErr(''); setGenUrl(''); }}>Intentar de nuevo</button>
-                    <button type="button" className="btn-outline" onClick={goBack}>Regresar</button>
-                  </div>
-                </div>
-              )}
+                    <button type="button" className="btn ghost" onClick={() => resetFlow(false)}>
+                      Nuevo informe
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          </section>
+        )}
+      </main>
 
-              {!genLoading && genUrl && (
-                <>
-                  <div className="card">
-                    <h2 className="subtitle">Vista previa</h2>
-                    <div className="hint" style={{ marginBottom: 8 }}>Si el visor no carga, puedes abrir el PDF en otra pestaña.</div>
-                    <iframe title="Informe PDF" src={genUrl} className="pdf-preview" />
-                    <div className="wizard-actions" style={{ marginTop: 10 }}>
-                      <a className="btn-outline" href={genUrl} target="_blank" rel="noreferrer">Abrir en pestaña</a>
-                      <button type="button" className="btn" onClick={handleShareWhatsApp}>Compartir por WhatsApp</button>
-                    </div>
-                  </div>
+      {step > 1 && (
+        <button type="button" className="floating-start" onClick={() => setStep(1)}>
+          Volver al inicio
+        </button>
+      )}
 
-                  <div className="wizard-actions">
-                    <button type="button" className="btn-outline" onClick={() => resetFlow(false)}>Reiniciar flujo</button>
-                  </div>
-                </>
-              )}
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Estilos */}
       <style>{`
-        /* --- No scroll horizontal, solo vertical --- */
-        :where(html, body){ margin:0; height:100%; overflow-x:hidden; overflow-y:auto; }
-        :where(.dash-root, .content, .stack){ overflow-x:hidden; }
-        *{ box-sizing:border-box; min-width:0; }
-        img, video, canvas{ max-width:100%; height:auto; display:block; }
-        .hint, .msg, .label, .title, .subtitle{ overflow-wrap:anywhere; word-break:break-word; }
-
-        html, body, #root { height: 100%; }
-        html, body { background: #0f1113; }
-
-        :root{
-          --primary:#fff200;
-          --on-primary:#111111;
-          --bg:#0f1113;
-          --surface:#15181c;
-          --on-surface:#e9eaec;
-          --outline:rgba(255,255,255,0.18);
-          --outline-strong:rgba(255,255,255,0.28);
-          --label:#b8bcc3;
-          --danger:#ef4444;
-          --focus:rgba(255,242,0,0.35);
-          --upload-fg:#111111;
-        }
-        
-        .incidencia-row{ display:flex; gap:10px; align-items:center; }
-        .incidencia-row .input{ flex:1; }
-        .incidencia-row .btn-outline{ white-space:nowrap; padding-inline:14px; }
-        @media (prefers-color-scheme: dark){
-          :root{ --upload-fg:#ffffff; }
+        *, *::before, *::after {
+          box-sizing: border-box;
         }
 
-        .dash-root{
-          min-height:100svh; min-height:100dvh; width:100%;
-          background:var(--bg); color:var(--on-surface);
-          font-family: Inter, Roboto, system-ui, -apple-system, Segoe UI, Helvetica, Arial;
-          -webkit-tap-highlight-color: transparent;
-          overscroll-behavior-x: none;
-          touch-action: pan-y;
+        body {
+          margin: 0;
+          background: #0f1113;
         }
 
-        .topbar{
-          position:sticky; top:max(8px, env(safe-area-inset-top,0px));
-          display:flex; align-items:center; justify-content:space-between; gap:8px; margin:6px auto 10px;
-          width:min(100%,960px); padding:10px 12px; border-radius:14px; background:rgba(255,255,255,0.06);
-          border:1px solid var(--outline); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
-          box-shadow:0 8px 24px rgba(0,0,0,0.18);
-          z-index: 100;
-        }
-        .hello{ font-weight:600; }
-        .actions{ display:flex; gap:8px; flex-wrap:wrap; }
-
-        /* === Botón cerrar sesión igual a InformesPage === */
-        .btn-danger{
-          height:48px; padding:10px 14px; border-radius:10px; font-weight:700; cursor:pointer;
-          background: var(--danger); color:#fff; border:none;
-          transition: transform 120ms ease, opacity 120ms ease;
-        }
-        .btn-danger:hover{ transform: translateY(-1px); }
-
-        .content{ display:flex; justify-content:center; width:100%; }
-        .stack{ width:min(100%,960px); display:flex; flex-direction:column; align-items:center; gap:16px; padding:12px 12px 28px; }
-
-        .title{ margin:6px 0 0 0; font-weight:800; font-size:clamp(18px,4.5vw,28px); letter-spacing:.2px; text-align:center; }
-        .subtitle{ margin:0 0 10px 0; font-size:clamp(16px,4vw,20px); font-weight:700; }
-
-        .card{
-          position:relative;
-          width:100%; max-width:560px; padding:16px; border-radius:16px; background:var(--surface);
-          border:1px solid var(--outline); color:var(--on-surface);
-          box-shadow:0 10px 36px rgba(0,0,0,0.30); transition:transform 160ms ease, box-shadow 180ms ease;
-          animation: md-enter 260ms cubic-bezier(.2,.8,.2,1);
-        }
-        .card:hover{ transform: translateY(-1px); box-shadow: 0 12px 42px rgba(0,0,0,0.34); }
-        .card.is-busy{ animation: md-busy 700ms ease-out 1; }
-
-        .md-progress{
-          position:absolute; top:0; left:0; right:0; height:3px; overflow:hidden;
-          border-top-left-radius:16px; border-top-right-radius:16px; background:transparent;
-        }
-        .md-progress::before{
-          content:""; position:absolute; inset:0;
-          background: linear-gradient(90deg, transparent 0, rgba(255,242,0,.2) 30%, var(--primary) 52%, rgba(255,242,0,.2) 74%, transparent 100%);
-          transform: translateX(-100%);
-          animation: md-indeterminate 1.2s cubic-bezier(.4,0,.2,1) infinite;
+        .dash-root {
+          min-height: 100vh;
+          background:
+            radial-gradient(circle at top left, rgba(255, 242, 0, 0.12), transparent 28%),
+            linear-gradient(180deg, #101317 0%, #0b0d10 100%);
+          color: #f4f4f5;
+          font-family: Inter, Roboto, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif;
         }
 
-        .filters-grid{ display:grid; grid-template-columns:1fr; gap:10px; }
-        @media (min-width:640px){ .filters-grid{ grid-template-columns:1fr 1fr; } }
-        .filters-actions{ margin-top:6px; display:flex; align-items:center; justify-content:space-between; gap:8px; }
-        .hint{ font-size:.95rem; color:var(--label); }
-
-        .field{ margin-bottom:10px; }
-        .label{ display:block; font-weight:600; color:var(--label); margin-bottom:6px; }
-
-        .input, .textarea{
-          width:100%; border-radius:12px; border:1px solid var(--outline); background:transparent; color:var(--on-surface);
-          font-size:16px; outline:none; transition:border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
+        .topbar {
+          width: min(1180px, calc(100% - 32px));
+          margin: 0 auto;
+          padding: 22px 0;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 18px;
         }
-        .input{ height:48px; padding:10px 12px; }
-        .textarea{ padding:10px 12px; resize:vertical; min-height:84px; }
-        .input:focus, .textarea:focus{ box-shadow:0 0 0 4px var(--focus); border-color:var(--outline-strong); }
 
-        /* Select nativo para móvil (tienda) */
-        .select-native{
-          width:100%; height:52px; padding:10px 12px; border-radius:12px; border:1px solid var(--outline);
-          background:transparent; color:var(--on-surface); font-size:16px; appearance:auto;
+        .topbar h1 {
+          margin: 0;
+          font-size: clamp(22px, 3vw, 34px);
+          letter-spacing: -0.04em;
         }
-        .select-native:focus{ outline:none; box-shadow:0 0 0 4px var(--focus); border-color:var(--outline-strong); }
 
-        .btn{
-          width:100%; height:52px; padding:12px; background:var(--primary); color:var(--on-primary); border:none; border-radius:12px;
-          font-weight:800; cursor:pointer; display:inline-flex; align-items:center; justify-content:center;
-          transition:transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease; user-select:none;
-          box-shadow:0 8px 24px rgba(0,0,0,0.18);
+        .topbar p {
+          margin: 4px 0 0;
+          color: #b8bcc3;
+          font-size: 14px;
         }
-        .btn:hover{ transform:translateY(-1px); }
-        .btn:active{ transform:translateY(0); }
-        .btn:disabled{ opacity:.7; cursor:not-allowed; }
-        .btn.is-loading{ animation: md-pulse 1.2s ease-in-out infinite; }
 
-        .btn-primary{
-          width:100%; max-width:560px; height:52px; padding:12px; background:var(--primary); color:var(--on-primary); border:none; border-radius:12px;
-          font-weight:800; cursor:pointer; display:inline-flex; align-items:center; justify-content:center;
-          transition:transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease; user-select:none; box-shadow:0 8px 24px rgba(0,0,0,0.18);
+        .top-actions {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex-wrap: wrap;
+          justify-content: flex-end;
         }
-        .btn-primary:hover{ transform:translateY(-1px); }
-        .btn-primary:active{ transform:translateY(0); }
 
-        .btn-outline{
-          height:44px; padding:8px 14px; border-radius:12px; font-weight:700; cursor:pointer;
-          background:rgba(255,255,255,0.08); color:var(--on-surface); border:1px solid var(--outline);
-          backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
-          transition:transform 120ms ease, opacity 120ms ease, background 150ms ease, border-color 150ms ease;
+        .dash-container {
+          width: min(980px, calc(100% - 32px));
+          margin: 0 auto;
+          padding: 10px 0 48px;
         }
-        .btn-outline:hover{ transform:translateY(-1px); }
 
-        .msg{ margin-top:10px; font-weight:700; text-align:center; }
+        .hero {
+          display: flex;
+          align-items: stretch;
+          justify-content: space-between;
+          gap: 18px;
+          margin-bottom: 18px;
+        }
 
-        .upload-toggles{ display:grid; grid-template-columns:1fr; gap:10px; margin-bottom:8px; }
-        @media (min-width:520px){ .upload-toggles{ grid-template-columns:1fr 1fr; } }
-        .upload-toggles--center{ grid-template-columns:1fr; justify-items:center; }
-        @media (min-width:520px){ .upload-toggles--center{ grid-template-columns:1fr; } }
-        .upload-toggles--center .upload-btn{ width:100%; max-width:440px; margin-inline:auto; }
+        .hero > div:first-child {
+          flex: 1;
+          padding: 24px;
+          border-radius: 24px;
+          background: rgba(255, 255, 255, 0.06);
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          backdrop-filter: blur(18px);
+          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.28);
+        }
 
-        .upload-btn{
-          position:relative; display:flex; align-items:center; gap:12px; width:100%; min-height:76px; padding:12px;
-          border-radius:14px; background:rgba(255,255,255,0.10); border:1px solid var(--outline);
-          backdrop-filter: blur(14px) saturate(135%); -webkit-backdrop-filter: blur(14px) saturate(135%);
-          box-shadow: 0 10px 24px rgba(0,0,0,0.22); cursor:pointer; font-weight:800;
-          color: var(--upload-fg);
-          transition: transform 120ms ease, box-shadow 150ms ease, background 150ms ease, border-color 150ms ease, color 150ms ease;
+        .hero h2 {
+          margin: 0;
+          font-size: clamp(24px, 4vw, 42px);
+          letter-spacing: -0.05em;
+        }
+
+        .hero p {
+          margin: 8px 0 0;
+          color: #c5c8ce;
+          max-width: 620px;
+          line-height: 1.5;
+        }
+
+        .session-chip {
+          min-width: 210px;
+          padding: 18px;
+          border-radius: 24px;
+          background: rgba(255, 242, 0, 0.12);
+          border: 1px solid rgba(255, 242, 0, 0.24);
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          gap: 6px;
+        }
+
+        .session-chip span {
+          color: #c9c9c9;
+          font-size: 12px;
+          text-transform: uppercase;
+          letter-spacing: 0.12em;
+        }
+
+        .session-chip strong {
+          word-break: break-all;
+          font-size: 13px;
+          color: #fff200;
+        }
+
+        .steps {
+          display: grid;
+          grid-template-columns: repeat(5, 1fr);
+          gap: 10px;
+          margin: 18px 0;
+        }
+
+        .step-dot {
+          height: 8px;
+          border-radius: 999px;
+          background: rgba(255, 255, 255, 0.12);
+          position: relative;
           overflow: hidden;
         }
-        .upload-btn:hover{ transform: translateY(-1px); box-shadow: 0 14px 32px rgba(0,0,0,0.28); }
-        .upload-btn:active::after{
-          content:""; position:absolute; inset:0; background: radial-gradient(120px 120px at var(--x,50%) var(--y,50%), rgba(255,255,255,0.18), transparent 70%);
-          pointer-events:none;
-        }
-        .upload-btn:focus{ outline:none; box-shadow: 0 0 0 4px var(--focus); }
 
-        .thumb-wrap{ position:relative; display:inline-grid; place-items:center; }
-        .icon-slab{
-          width:84px; height:64px; border-radius:12px; display:grid; place-items:center;
-          background: linear-gradient(180deg, rgba(255,255,255,0.22), rgba(255,255,255,0.10));
-          border:1px solid var(--outline);
-          backdrop-filter: blur(10px) saturate(120%); -webkit-backdrop-filter: blur(10px) saturate(120%);
-          box-shadow: inset 0 1px 0 rgba(0,0,0,0.35), 0 6px 18px rgba(0,0,0,0.14);
-          color: var(--upload-fg);
-        }
-        .upload-icon{ opacity:.95; }
-
-        .thumb-box-lg{
-          width:128px; height:84px; border-radius:12px; overflow:hidden; posicion:relative; display:grid; place-items:center;
-          background: linear-gradient(180deg, rgba(255,255,255,0.18), rgba(255,255,255,0.06)); border:1px solid var(--outline);
-          backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-        }
-        .thumb-box-lg.pdf{ background:#e94f37; color:#fff; }
-        .thumb-img-lg{ width:100%; height:100%; object-fit:cover; display:block; }
-        .thumb-count-lg{
-          position:absolute; right:-6px; bottom:-6px; background:rgba(0,0,0,0.78); color:#fff; font-size:12px; border-radius:10px; padding:2px 6px; line-height:1;
+        .step-dot span {
+          position: absolute;
+          opacity: 0;
         }
 
-        .pdf-badge{
-          display:inline-block; padding:6px 10px; border-radius:10px;
-          background:#e94f37; color:#fff; font-weight:800; font-size:13px; letter-spacing:.4px;
-          box-shadow:0 4px 12px rgba(0,0,0,0.18);
+        .step-dot.active {
+          background: #fff200;
+          box-shadow: 0 0 24px rgba(255, 242, 0, 0.35);
         }
 
-        .clear-x{
-          position:absolute; top:6px; right:6px; width:24px; height:24px; line-height:22px; text-align:center; border-radius:10px;
-          background: rgba(255,255,255,0.12); border:1px solid var(--outline);
-          backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-          font-weight:800; cursor:pointer; user-select:none; color: var(--upload-fg);
+        .step-dot.done {
+          background: rgba(255, 242, 0, 0.45);
         }
 
-        .upload-label{ flex:1; text-align:left; font-weight:800; letter-spacing:.2px; }
-
-        .counters{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
-        .badge{
-          display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px;
-          background:rgba(255,255,255,0.10); border:1px solid var(--outline); font-weight:800; font-size:13px;
-        }
-        .badge .num{ min-width: 1ch; text-align:right; }
-        .badge .dot{ width:8px; height:8px; border-radius:999px; display:inline-block; }
-        .badge .dot.pre{ background:#60a5fa; }
-        .badge .dot.post{ background:#34d399; }
-        .badge.bump{ animation: badge-bump 340ms ease; }
-
-        .glass-select { position: relative; }
-        .select-trigger{
-          width:100%; height:52px; padding:12px; font-size:16px; border-radius:12px; border:1px solid var(--outline);
-          background:transparent; color:var(--on-surface); display:flex; align-items:center; justify-content:space-between; gap:8px; cursor:pointer;
-          transition:border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
-        }
-        .select-trigger:focus{ outline:none; box-shadow:0 0 0 4px var(--focus); }
-        .select-trigger .selected.placeholder{ opacity:.75; }
-        .select-trigger .chev{ flex-shrink:0; opacity:.75; }
-
-        .dropdown-overlay{ position:fixed; inset:0; z-index:2147483647; background:rgba(0,0,0,0.12);
-          backdrop-filter:blur(2.5px) saturate(120%); -webkit-backdrop-filter:blur(2.5px) saturate(120%); animation:fadeIn 120ms ease forwards; }
-        .dropdown-panel{
-          position:fixed; max-height:60svh; overflow:auto; -webkit-overflow-scrolling:touch; background:rgba(21,24,28,0.98); border:1px solid var(--outline);
-          border-radius:14px; box-shadow:0 16px 40px rgba(0,0,0,0.28); padding:6px; animation:pop 140ms ease; color:var(--on-surface);
-          max-width: calc(100vw - 16px);
-        }
-        .option{ display:flex; align-items:center; justify-content:space-between; gap:8px; padding:12px; border-radius:10px; font-size:18px; cursor:pointer; transition:background 120ms ease, transform 120ms ease; }
-        .option:hover, .option.active{ background:rgba(255,255,255,0.10); }
-        .option.selected{ font-weight:700; }
-        .option.empty{ opacity:.7; cursor:default; }
-        .option .check{ opacity:.9; }
-
-        .info-row{
-          display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px; color:var(--label);
-          font-size:.95rem; flex-wrap:wrap;
+        .card {
+          background: rgba(255, 255, 255, 0.075);
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          border-radius: 26px;
+          box-shadow: 0 22px 70px rgba(0, 0, 0, 0.32);
+          backdrop-filter: blur(22px);
         }
 
-        .wizard-actions{
-          display:flex; gap:10px; justify-content:space-between; align-items:center; margin-top:12px;
+        .step-card {
+          padding: clamp(20px, 4vw, 34px);
+          animation: enter 220ms ease-out;
         }
 
-        /* Stepper: 4 columnas en desktop, 2x2 en móvil */
-        .stepper .steps{
-          display:grid; grid-template-columns:repeat(5,1fr); gap:8px; margin-bottom:8px;
-        }
-        @media (max-width:560px){
-          .stepper .steps{ grid-template-columns:repeat(2,1fr); }
-        }
-        .stepper .step{
-          display:flex; align-items:center; gap:8px; padding:8px; border-radius:12px; border:1px solid var(--outline); background:rgba(255,255,255,0.06);
-          font-weight:700; font-size:clamp(12px,3.2vw,14px);
-        }
-        .stepper .step span{ width:22px; height:22px; display:inline-grid; place-items:center; border-radius:999px; background:rgba(0,0,0,0.15); }
-        .stepper .step.current{ outline:2px solid var(--outline); }
-        .stepper .step.done span{ background:#9ae6b4; }
-        .step-quick{
-          display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-top:6px; font-size:clamp(12px,3.2vw,14px);
+        .step-card h3 {
+          margin: 0;
+          font-size: clamp(22px, 3vw, 32px);
+          letter-spacing: -0.04em;
         }
 
-        .md-spinner{
-          --sz: 22px;
-          width: var(--sz);
-          height: var(--sz);
-          border-radius: 50%;
-          background: conic-gradient(from 0deg, transparent 0 28%, var(--on-primary) 32% 64%, transparent 68% 100%);
-          -webkit-mask: radial-gradient(farthest-side, transparent calc(50% - 4px), #000 calc(50% - 3px));
-                  mask: radial-gradient(farthest-side, transparent calc(50% - 4px), #000 calc(50% - 3px));
-          animation: md-rotate .9s linear infinite;
+        .step-card p {
+          margin: 8px 0 22px;
+          color: #c5c8ce;
+          line-height: 1.5;
         }
 
-        .pdf-preview{
-          width:100%;
-          display:block;
-          height: clamp(320px, 65dvh, 80dvh);
-          border:none; border-radius:12px; background:#fff;
+        .field {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          margin-bottom: 16px;
         }
-        @media (max-width: 600px){ .pdf-preview{ height: clamp(220px, 48dvh, 58dvh); } }
-        @media (max-width: 380px){ .pdf-preview{ height: clamp(200px, 42dvh, 52dvh); } }
 
-        @keyframes badge-bump{ 0%{ transform:scale(1);} 30%{ transform:scale(1.08);} 100%{ transform:scale(1);} }
-        @keyframes md-enter{ from{ opacity:0; transform: translateY(4px) scale(.995);} to{ opacity:1; transform: translateY(0) scale(1);} }
-        @keyframes md-busy{ 0%{transform:translateY(0) scale(1);} 40%{transform:translateY(-1px) scale(1.005);} 100%{transform:translateY(0) scale(1);} }
-        @keyframes md-pulse{ 0%,100%{ box-shadow:0 8px 24px rgba(0,0,0,0.18); transform:translateY(0);} 50%{ box-shadow:0 12px 28px rgba(0,0,0,0.22); transform:translateY(-1px);} }
-        @keyframes md-indeterminate{ to { transform: translateX(100%); } }
-        @keyframes md-rotate{ to { transform: rotate(360deg); } }
+        .field label {
+          font-size: 13px;
+          color: #d7d9dd;
+          font-weight: 700;
+        }
+
+        input,
+        textarea {
+          width: 100%;
+          border: 1px solid rgba(255, 255, 255, 0.16);
+          background: rgba(255, 255, 255, 0.08);
+          color: #f5f5f5;
+          border-radius: 16px;
+          padding: 14px 16px;
+          font-size: 15px;
+          outline: none;
+          transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+        }
+
+        input:focus,
+        textarea:focus {
+          border-color: rgba(255, 242, 0, 0.45);
+          box-shadow: 0 0 0 4px rgba(255, 242, 0, 0.12);
+          background: rgba(255, 255, 255, 0.1);
+        }
+
+        textarea {
+          resize: vertical;
+          min-height: 110px;
+        }
+
+        .filters-grid {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 14px;
+        }
+
+        .store-search-field {
+          position: relative;
+        }
+
+        .autocomplete-box {
+          position: relative;
+        }
+
+        .suggestions-panel {
+          position: absolute;
+          top: calc(100% + 8px);
+          left: 0;
+          right: 0;
+          z-index: 30;
+          max-height: 310px;
+          overflow: auto;
+          padding: 8px;
+          border-radius: 18px;
+          background: rgba(22, 24, 29, 0.97);
+          border: 1px solid rgba(255, 255, 255, 0.14);
+          box-shadow: 0 24px 90px rgba(0, 0, 0, 0.46);
+          backdrop-filter: blur(18px);
+        }
+
+        .suggestion-item {
+          width: 100%;
+          border: 0;
+          border-radius: 14px;
+          background: transparent;
+          color: #f4f4f5;
+          padding: 12px;
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 5px;
+          cursor: pointer;
+          text-align: left;
+        }
+
+        .suggestion-item:hover,
+        .suggestion-item.selected {
+          background: rgba(255, 242, 0, 0.13);
+        }
+
+        .suggestion-item strong {
+          color: #fff;
+          font-size: 14px;
+          line-height: 1.25;
+        }
+
+        .suggestion-item span {
+          color: #c5c8ce;
+          font-size: 12px;
+          line-height: 1.25;
+        }
+
+        .suggestion-empty {
+          padding: 13px;
+          color: #c5c8ce;
+          font-size: 14px;
+          font-weight: 700;
+        }
+
+        .selected-store {
+          margin-top: 12px;
+          padding: 14px;
+          border-radius: 18px;
+          background: rgba(255, 242, 0, 0.11);
+          border: 1px solid rgba(255, 242, 0, 0.24);
+        }
+
+        .selected-store span {
+          display: block;
+          color: #fff200;
+          font-size: 12px;
+          font-weight: 900;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+          margin-bottom: 5px;
+        }
+
+        .selected-store strong {
+          display: block;
+          color: #fff;
+          font-size: 15px;
+          overflow-wrap: anywhere;
+        }
+
+        .selected-store p {
+          margin: 5px 0 0;
+          color: #c5c8ce;
+          font-size: 13px;
+        }
+
+        .actions {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          margin-top: 22px;
+        }
+
+        .actions.between {
+          justify-content: space-between;
+        }
+
+        .right-actions {
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+
+        .btn {
+          min-height: 44px;
+          border: 0;
+          border-radius: 14px;
+          padding: 0 18px;
+          font-weight: 800;
+          cursor: pointer;
+          color: #111;
+          transition: transform 120ms ease, opacity 120ms ease, box-shadow 160ms ease;
+        }
+
+        .btn:hover:not(:disabled) {
+          transform: translateY(-1px);
+        }
+
+        .btn:disabled {
+          cursor: not-allowed;
+          opacity: 0.55;
+        }
+
+        .btn.primary {
+          background: #fff200;
+          box-shadow: 0 12px 28px rgba(255, 242, 0, 0.16);
+        }
+
+        .btn.secondary {
+          background: rgba(255, 255, 255, 0.12);
+          color: #fff;
+          border: 1px solid rgba(255, 255, 255, 0.16);
+        }
+
+        .btn.ghost {
+          background: rgba(255, 255, 255, 0.08);
+          color: #fff;
+          border: 1px solid rgba(255, 255, 255, 0.14);
+        }
+
+        .btn.danger {
+          background: rgba(255, 74, 74, 0.14);
+          color: #ffb7b7;
+          border: 1px solid rgba(255, 74, 74, 0.24);
+        }
+
+        .floating-start {
+          position: fixed;
+          right: 22px;
+          bottom: 22px;
+          z-index: 50;
+          min-height: 48px;
+          border: 1px solid rgba(255, 242, 0, 0.28);
+          border-radius: 999px;
+          padding: 0 18px;
+          background: rgba(255, 242, 0, 0.16);
+          color: #fff200;
+          font-weight: 900;
+          backdrop-filter: blur(18px);
+          box-shadow: 0 18px 45px rgba(0, 0, 0, 0.36);
+          cursor: pointer;
+          transition: transform 140ms ease, background 140ms ease;
+        }
+
+        .floating-start:hover {
+          transform: translateY(-2px);
+          background: rgba(255, 242, 0, 0.22);
+        }
+
+        .counter-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 14px;
+          margin: 18px 0;
+        }
+
+        .counter-box {
+          padding: 18px;
+          border-radius: 20px;
+          background: rgba(255, 255, 255, 0.08);
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        }
+
+        .counter-box span {
+          color: #c5c8ce;
+          font-weight: 700;
+        }
+
+        .counter-box strong {
+          font-size: 32px;
+          color: #fff200;
+        }
+
+        .counter-box.bump {
+          animation: bump 320ms ease-out;
+        }
+
+        .upload-form {
+          margin-top: 10px;
+        }
+
+        .hidden-input {
+          display: none;
+        }
+
+        .file-card {
+          position: relative;
+          min-height: 280px;
+          border-radius: 22px;
+          overflow: hidden;
+          background: rgba(255, 255, 255, 0.075);
+          border: 1px dashed rgba(255, 255, 255, 0.22);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          transition: border-color 160ms ease, transform 160ms ease, background 160ms ease;
+        }
+
+        .file-card:hover {
+          border-color: rgba(255, 242, 0, 0.5);
+          background: rgba(255, 255, 255, 0.1);
+          transform: translateY(-1px);
+        }
+
+        .file-card.small {
+          min-height: 230px;
+        }
+
+        .file-card img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          display: block;
+          position: absolute;
+          inset: 0;
+        }
+
+        .file-placeholder {
+          text-align: center;
+          padding: 22px;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          color: #fff;
+        }
+
+        .file-placeholder strong {
+          font-size: 18px;
+        }
+
+        .file-placeholder span {
+          color: #c5c8ce;
+          font-size: 14px;
+        }
+
+        .selected-file strong {
+          word-break: break-word;
+        }
+
+        .file-clear {
+          position: absolute;
+          right: 12px;
+          top: 12px;
+          border: 0;
+          border-radius: 999px;
+          background: rgba(0, 0, 0, 0.72);
+          color: #fff;
+          padding: 8px 12px;
+          cursor: pointer;
+          z-index: 2;
+          font-weight: 800;
+        }
+
+        .file-count {
+          position: absolute;
+          left: 12px;
+          bottom: 12px;
+          z-index: 2;
+          border-radius: 999px;
+          background: rgba(0, 0, 0, 0.72);
+          color: #fff200;
+          padding: 8px 12px;
+          font-size: 12px;
+          font-weight: 900;
+        }
+
+        .dual-upload {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 16px;
+        }
+
+        .message,
+        .success-message,
+        .error-message {
+          margin: 16px 0 0;
+          padding: 12px 14px;
+          border-radius: 14px;
+          font-weight: 700;
+        }
+
+        .message {
+          background: rgba(255, 255, 255, 0.08);
+          color: #f1f1f1;
+        }
+
+        .success-message {
+          background: rgba(38, 201, 111, 0.14);
+          color: #aef2ca;
+          border: 1px solid rgba(38, 201, 111, 0.22);
+        }
+
+        .error-message {
+          background: rgba(255, 74, 74, 0.14);
+          color: #ffb7b7;
+          border: 1px solid rgba(255, 74, 74, 0.22);
+        }
+
+        .summary-grid {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 14px;
+          margin: 20px 0;
+        }
+
+        .summary-grid > div {
+          padding: 16px;
+          border-radius: 18px;
+          background: rgba(255, 255, 255, 0.08);
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+
+        .summary-grid span {
+          color: #b8bcc3;
+          font-size: 13px;
+          font-weight: 700;
+        }
+
+        .summary-grid strong {
+          color: #fff;
+          font-size: 17px;
+          word-break: break-word;
+        }
+
+        .geo-box {
+          margin: 18px 0 0;
+          padding: 16px;
+          border-radius: 18px;
+          background: rgba(255, 255, 255, 0.08);
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 14px;
+        }
+
+        .geo-box.ready {
+          background: rgba(38, 201, 111, 0.12);
+          border-color: rgba(38, 201, 111, 0.24);
+        }
+
+        .geo-box.error,
+        .geo-box.unavailable {
+          background: rgba(255, 174, 0, 0.11);
+          border-color: rgba(255, 174, 0, 0.24);
+        }
+
+        .geo-box span {
+          display: block;
+          color: #b8bcc3;
+          font-size: 13px;
+          font-weight: 800;
+          margin-bottom: 6px;
+        }
+
+        .geo-box strong {
+          display: block;
+          color: #fff;
+          font-size: 15px;
+          overflow-wrap: anywhere;
+        }
+
+        .geo-box p {
+          margin: 6px 0 0;
+          color: #c5c8ce;
+          font-size: 13px;
+          line-height: 1.35;
+        }
+
+        .result-box {
+          margin-top: 18px;
+          padding: 18px;
+          border-radius: 18px;
+          background: rgba(255, 242, 0, 0.11);
+          border: 1px solid rgba(255, 242, 0, 0.24);
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 14px;
+          flex-wrap: wrap;
+        }
+
+        .result-box span {
+          color: #fff;
+          font-weight: 800;
+        }
+
+        .result-box a {
+          color: #fff200;
+          font-weight: 900;
+          text-decoration: none;
+        }
+
+        .glass-select {
+          position: relative;
+        }
+
+        .glass-select.disabled {
+          opacity: 0.6;
+          pointer-events: none;
+        }
+
+        .select-trigger {
+          width: 100%;
+          min-height: 48px;
+          border: 1px solid rgba(255, 255, 255, 0.16);
+          background: rgba(255, 255, 255, 0.08);
+          color: #fff;
+          border-radius: 16px;
+          padding: 0 14px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          cursor: pointer;
+          text-align: left;
+        }
+
+        .select-trigger:focus {
+          outline: none;
+          border-color: rgba(255, 242, 0, 0.45);
+          box-shadow: 0 0 0 4px rgba(255, 242, 0, 0.12);
+        }
+
+        .selected {
+          overflow: hidden;
+          white-space: nowrap;
+          text-overflow: ellipsis;
+        }
+
+        .selected.placeholder {
+          color: #b8bcc3;
+        }
+
+        .chev {
+          flex: 0 0 auto;
+          opacity: 0.8;
+        }
+
+        .dropdown-overlay {
+          position: fixed;
+          inset: 0;
+          z-index: 9999;
+        }
+
+        .dropdown-panel {
+          position: fixed;
+          max-height: min(360px, calc(100vh - 40px));
+          overflow: auto;
+          border-radius: 18px;
+          background: rgba(22, 24, 29, 0.96);
+          border: 1px solid rgba(255, 255, 255, 0.14);
+          box-shadow: 0 24px 90px rgba(0, 0, 0, 0.46);
+          backdrop-filter: blur(18px);
+          padding: 8px;
+        }
+
+        .dropdown-panel:focus {
+          outline: none;
+        }
+
+        .option {
+          min-height: 44px;
+          padding: 11px 12px;
+          border-radius: 12px;
+          color: #f4f4f5;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          cursor: pointer;
+        }
+
+        .option.active {
+          background: rgba(255, 255, 255, 0.08);
+        }
+
+        .option.selected {
+          background: rgba(255, 242, 0, 0.13);
+          color: #fff200;
+        }
+
+        .option.empty {
+          color: #b8bcc3;
+          cursor: default;
+        }
+
+        .option .label {
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .option .check {
+          font-size: 11px;
+          color: #fff200;
+          font-weight: 900;
+        }
+
+        @keyframes enter {
+          from {
+            opacity: 0;
+            transform: translateY(6px);
+          }
+
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        @keyframes bump {
+          0% {
+            transform: scale(1);
+          }
+
+          45% {
+            transform: scale(1.035);
+          }
+
+          100% {
+            transform: scale(1);
+          }
+        }
+
+        @media (max-width: 760px) {
+          .topbar {
+            flex-direction: column;
+            align-items: stretch;
+          }
+
+          .top-actions {
+            justify-content: stretch;
+          }
+
+          .top-actions .btn {
+            flex: 1;
+          }
+
+          .hero {
+            flex-direction: column;
+          }
+
+          .session-chip {
+            min-width: 0;
+          }
+
+          .filters-grid,
+          .dual-upload,
+          .summary-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .actions.between {
+            flex-direction: column;
+            align-items: stretch;
+          }
+
+          .right-actions {
+            justify-content: stretch;
+            flex-direction: column;
+          }
+
+          .right-actions .btn,
+          .actions > .btn {
+            width: 100%;
+          }
+
+          .counter-grid {
+            grid-template-columns: 1fr 1fr;
+          }
+
+          .geo-box {
+            align-items: stretch;
+            flex-direction: column;
+          }
+
+          .geo-box .btn {
+            width: 100%;
+          }
+
+          .file-card {
+            min-height: 230px;
+          }
+
+          .floating-start {
+            left: 18px;
+            right: 18px;
+            bottom: 16px;
+            width: calc(100% - 36px);
+          }
+        }
+
+        @media (max-width: 420px) {
+          .dash-container,
+          .topbar {
+            width: min(100% - 22px, 980px);
+          }
+
+          .step-card {
+            border-radius: 22px;
+          }
+
+          .counter-grid {
+            grid-template-columns: 1fr;
+          }
+        }
       `}</style>
-
-      {/* Ripple para botones de upload en JS puro */}
-      <script dangerouslySetInnerHTML={{__html: `
-        document.addEventListener('click', function(e){
-          var target = e.target;
-          if (!target || !target.closest) return;
-          var btn = target.closest('.upload-btn');
-          if (!btn) return;
-          var rect = btn.getBoundingClientRect();
-          btn.style.setProperty('--x', (e.clientX - rect.left) + 'px');
-          btn.style.setProperty('--y', (e.clientY - rect.top) + 'px');
-        }, { passive: true });
-      `}} />
     </div>
   );
 };
