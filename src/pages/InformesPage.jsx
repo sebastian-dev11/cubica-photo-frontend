@@ -1227,6 +1227,8 @@ const InformesPage = () => {
           }
 
           .topbar {
+            position: static;
+            top: auto;
             align-items: stretch;
             flex-direction: column;
           }

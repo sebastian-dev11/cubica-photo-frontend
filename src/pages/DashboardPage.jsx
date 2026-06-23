@@ -3053,10 +3053,7 @@ const DashboardPage = () => {
           }
 
           .floating-start {
-            left: 18px;
-            right: 18px;
-            bottom: 16px;
-            width: calc(100% - 36px);
+            display: none;
           }
         }
 
@@ -3081,7 +3078,7 @@ const DashboardPage = () => {
           }
 
           .dash-root {
-            padding-bottom: 92px;
+            padding-bottom: 0;
           }
 
           .topbar {
@@ -3296,11 +3293,7 @@ const DashboardPage = () => {
           }
 
           .floating-start {
-            left: 10px;
-            right: 10px;
-            bottom: calc(12px + env(safe-area-inset-bottom));
-            width: calc(100% - 20px);
-            min-height: 52px;
+            display: none;
           }
         }
 
