@@ -11,7 +11,7 @@ const WAIT_MESSAGES = [
   'Estableciendo canal seguro...',
   'Sincronizando servicios...',
   'Comprobando credenciales...',
-  'Preparando tu sesion...',
+  'Preparando tu sesión...',
   'Optimizando recursos...',
   'Casi estamos...'
 ];
@@ -49,7 +49,7 @@ const LoginPage = () => {
   const guardarSesionLocal = (res) => {
     localStorage.setItem('token', res.token);
     localStorage.setItem('sesionId', res.sesionId);
-    localStorage.setItem('nombreTecnico', res.nombre || 'Tecnico');
+    localStorage.setItem('nombreTecnico', res.nombre || 'Técnico');
     localStorage.setItem('isAdmin', res.isAdmin ? '1' : '0');
     localStorage.setItem('userId', res.userId);
     localStorage.setItem('usuario', res.usuario || usuario.trim());
@@ -61,7 +61,7 @@ const LoginPage = () => {
       err?.response?.data?.mensaje ||
       err?.response?.data?.error ||
       err?.message ||
-      'Error en el servidor o conexion'
+      'Error en el servidor o conexión'
     );
   };
 
@@ -108,7 +108,7 @@ const LoginPage = () => {
           setLatenciaMs(dtTotal);
 
           if (!res?.token || !res?.sesionId || !res?.userId) {
-            setMensaje('Respuesta de inicio de sesion incompleta');
+            setMensaje('Respuesta de inicio de sesión incompleta');
             return;
           }
 
@@ -137,7 +137,7 @@ const LoginPage = () => {
       }
 
       if (ex?.message === 'timeout') {
-        setMensaje('No se pudo conectar. El servidor podria seguir reactivandose. Intenta nuevamente.');
+        setMensaje('No se pudo conectar. El servidor podría seguir reactivándose. Intenta nuevamente.');
       } else {
         setMensaje(getMensajeError(ex));
       }
@@ -160,14 +160,14 @@ const LoginPage = () => {
         <section className="intro-panel">
           <div className="intro-card">
             <span className="eyebrow">Cubica PDF App</span>
-            <h1>Gestiona informes tecnicos con evidencia fotografica.</h1>
+            <h1>Gestiona informes técnicos con evidencia fotográfica.</h1>
             <p>
               Ingresa con tu usuario para cargar evidencias, actas y generar informes PDF.
             </p>
           </div>
         </section>
 
-        <section className={`login-card ${cargando ? 'is-busy' : ''}`} aria-label="Formulario de inicio de sesion">
+        <section className={`login-card ${cargando ? 'is-busy' : ''}`} aria-label="Formulario de inicio de sesión">
           {cargando && <div className="md-progress" role="progressbar" aria-label="Cargando" />}
 
           <div className="logo-wrap">
@@ -181,19 +181,19 @@ const LoginPage = () => {
 
           <div className="login-heading">
             <span>Bienvenido</span>
-            <h2>Iniciar sesion</h2>
-            <p>Accede para continuar con la generacion de informes.</p>
+            <h2>Iniciar sesión</h2>
+            <p>Accede para continuar con la generación de informes.</p>
           </div>
 
           <form onSubmit={handleSubmit} className="form" noValidate>
             <div className="field">
-              <label htmlFor="usuario">Cedula o usuario</label>
+              <label htmlFor="usuario">Cédula o usuario</label>
               <input
                 id="usuario"
                 type="text"
                 value={usuario}
                 onChange={(e) => setUsuario(e.target.value)}
-                placeholder="Ingresa tu cedula"
+                placeholder="Ingresa tu cédula"
                 required
                 autoCapitalize="none"
                 autoCorrect="off"

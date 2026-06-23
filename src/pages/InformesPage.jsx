@@ -72,7 +72,7 @@ const InformesPage = () => {
   });
 
   const token = localStorage.getItem('token') || '';
-  const nombreTecnico = localStorage.getItem('nombreTecnico') || 'Tecnico';
+  const nombreTecnico = localStorage.getItem('nombreTecnico') || 'Técnico';
   const isAdmin = localStorage.getItem('isAdmin') === '1' || localStorage.getItem('isAdmin') === 'true';
 
   const limpiarSesionLocal = useCallback(() => {
@@ -147,6 +147,12 @@ const InformesPage = () => {
   const handleVer = (url) => {
     if (!url) return;
     window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const getTituloInforme = (inf) => {
+    const tiendaNombre = (inf?.tiendaNombre || inf?.tiendaId?.nombre || '').toString().trim();
+
+    return tiendaNombre ? `INFORME TÉCNICO - ${tiendaNombre}` : inf?.title || 'Informe técnico';
   };
 
   const formatFecha = (isoString) => {
@@ -266,7 +272,7 @@ const InformesPage = () => {
           )}
 
           <button type="button" className="btn danger" onClick={handleCerrarSesion}>
-            Cerrar sesion
+            Cerrar sesión
           </button>
         </div>
       </header>
@@ -275,9 +281,9 @@ const InformesPage = () => {
         <section className="hero">
           <div>
             <span className="eyebrow">Cubica PDF App</span>
-            <h2>{isAdmin ? 'Gestion de informes' : 'Tus informes generados'}</h2>
+            <h2>{isAdmin ? 'Gestión de informes' : 'Tus informes generados'}</h2>
             <p>
-              Consulta, filtra y revisa los informes tecnicos generados desde la aplicacion.
+              Consulta, filtra y revisa los informes técnicos generados desde la aplicación.
             </p>
           </div>
 
@@ -292,12 +298,12 @@ const InformesPage = () => {
 
           <div className="section-heading">
             <h3>Buscar informes</h3>
-            <p>Filtra por titulo, incidencia o regional.</p>
+            <p>Filtra por título, incidencia o regional.</p>
           </div>
 
           <div className="controls-grid">
             <div className="field">
-              <label>Buscar por titulo</label>
+              <label>Buscar por título</label>
               <input
                 type="text"
                 placeholder="Escribe para filtrar"
@@ -351,10 +357,10 @@ const InformesPage = () => {
                   setLimit(parseInt(e.target.value, 10));
                 }}
               >
-                <option value={5}>5 por pagina</option>
-                <option value={10}>10 por pagina</option>
-                <option value={20}>20 por pagina</option>
-                <option value={50}>50 por pagina</option>
+                <option value={5}>5 por página</option>
+                <option value={10}>10 por página</option>
+                <option value={20}>20 por página</option>
+                <option value={50}>50 por página</option>
               </select>
             </div>
           </div>
@@ -413,7 +419,7 @@ const InformesPage = () => {
               <article className="card item" key={inf._id}>
                 <div className="item-header">
                   <div>
-                    <h3>{inf.title}</h3>
+                    <h3>{getTituloInforme(inf)}</h3>
                     <p>{formatFecha(inf.createdAt)}</p>
                   </div>
 
@@ -465,7 +471,7 @@ const InformesPage = () => {
 
         <section className="card pager">
           <div>
-            <span>Pagina {page} de {totalPages}</span>
+            <span>Página {page} de {totalPages}</span>
             <strong>Total: {total}</strong>
           </div>
 
@@ -494,7 +500,7 @@ const InformesPage = () => {
       <ConfirmModal
         open={confirmOpen}
         title="Eliminar informe"
-        message={toDelete ? `Seguro que deseas eliminar "${toDelete.title}"? Esta accion no se puede deshacer.` : ''}
+        message={toDelete ? `¿Seguro que deseas eliminar "${getTituloInforme(toDelete)}"? Esta acción no se puede deshacer.` : ''}
         confirmText="Eliminar"
         cancelText="Cancelar"
         onConfirm={doDelete}
@@ -511,10 +517,10 @@ const InformesPage = () => {
         <div className="modal-overlay" role="presentation">
           <div className="modal-panel" role="dialog" aria-modal="true">
             <h3 className="modal-title">Editar informe</h3>
-            <p className="modal-msg">Actualiza la informacion visible del informe.</p>
+            <p className="modal-msg">Actualiza la información visible del informe.</p>
 
             <div className="field">
-              <label>Titulo</label>
+              <label>Título</label>
               <input
                 value={editData.title}
                 onChange={(e) =>
@@ -527,7 +533,7 @@ const InformesPage = () => {
             </div>
 
             <div className="field">
-              <label>Numero de incidencia</label>
+              <label>Número de incidencia</label>
               <input
                 value={editData.numeroIncidencia}
                 onChange={(e) =>

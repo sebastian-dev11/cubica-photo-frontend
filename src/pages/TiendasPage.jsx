@@ -275,7 +275,7 @@ function TiendasPage() {
         <section className="hero-card">
           <div>
             <p className="eyebrow yellow">Gestión de tiendas</p>
-            <h2>Crear, editar y consultar historial</h2>
+            <h2>Crear, editar y consultar el historial</h2>
             <p className="muted">Las tiendas creadas aquí aparecen automáticamente en el selector del Dashboard.</p>
           </div>
 
@@ -344,7 +344,7 @@ function TiendasPage() {
 
             <form className="form-grid" onSubmit={guardarTienda}>
               <label>
-                <span>Nombre de tienda</span>
+                <span>Nombre de la tienda</span>
                 <input
                   value={form.nombre}
                   onChange={(e) => actualizarCampo('nombre', e.target.value)}
@@ -411,7 +411,7 @@ function TiendasPage() {
               <div className="alert error">
                 {historyError}
                 <br />
-                Para activar el historial por tienda, agrega el endpoint de backend indicado.
+                Para activar el historial por tienda, agrega el endpoint del backend indicado.
               </div>
             ) : historyItems.length === 0 ? (
               <div className="empty-state">Esta tienda todavía no tiene informes asociados.</div>

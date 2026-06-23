@@ -151,7 +151,7 @@ const UsuariosPage = () => {
     }
 
     if (!createForm.contraseña || createForm.contraseña.length < 8) {
-      setMensaje('La contraseña debe tener minimo 8 caracteres');
+      setMensaje('La contraseña debe tener mínimo 8 caracteres');
       return;
     }
 
@@ -211,7 +211,7 @@ const UsuariosPage = () => {
     if (!passwordForm.id) return;
 
     if (!passwordForm.contraseña || passwordForm.contraseña.length < 8) {
-      setMensaje('La nueva contraseña debe tener minimo 8 caracteres');
+      setMensaje('La nueva contraseña debe tener mínimo 8 caracteres');
       return;
     }
 
@@ -270,7 +270,7 @@ const UsuariosPage = () => {
           </button>
 
           <button type="button" className="btn danger" onClick={handleCerrarSesion}>
-            Cerrar sesion
+            Cerrar sesión
           </button>
         </div>
       </header>
@@ -278,8 +278,8 @@ const UsuariosPage = () => {
       <main className="container">
         <section className="hero">
           <div>
-            <h2>Gestion de usuarios</h2>
-            <p>Administra tecnicos, roles, estados y contraseñas.</p>
+            <h2>Gestión de usuarios</h2>
+            <p>Administra técnicos, roles, estados y contraseñas.</p>
           </div>
 
           <button type="button" className="btn primary" onClick={abrirCrear}>
@@ -330,7 +330,7 @@ const UsuariosPage = () => {
 
                 <div className="badges">
                   <span className={`badge ${usuario.rol === 'admin' ? 'admin' : ''}`}>
-                    {usuario.rol === 'admin' ? 'Admin' : 'Tecnico'}
+                    {usuario.rol === 'admin' ? 'Admin' : 'Técnico'}
                   </span>
 
                   <span className={`badge ${usuario.activo === false ? 'inactive' : 'active'}`}>
@@ -404,7 +404,7 @@ const UsuariosPage = () => {
                 type="password"
                 value={createForm.contraseña}
                 onChange={(e) => setCreateForm((prev) => ({ ...prev, contraseña: e.target.value }))}
-                placeholder="Minimo 8 caracteres"
+                placeholder="Mínimo 8 caracteres"
               />
             </div>
 
@@ -414,7 +414,7 @@ const UsuariosPage = () => {
                 value={createForm.rol}
                 onChange={(e) => setCreateForm((prev) => ({ ...prev, rol: e.target.value }))}
               >
-                <option value="tecnico">Tecnico</option>
+                <option value="tecnico">Técnico</option>
                 <option value="admin">Admin</option>
               </select>
             </div>
@@ -470,7 +470,7 @@ const UsuariosPage = () => {
                 value={editForm.rol}
                 onChange={(e) => setEditForm((prev) => ({ ...prev, rol: e.target.value }))}
               >
-                <option value="tecnico">Tecnico</option>
+                <option value="tecnico">Técnico</option>
                 <option value="admin">Admin</option>
               </select>
             </div>
@@ -509,7 +509,7 @@ const UsuariosPage = () => {
                 type="password"
                 value={passwordForm.contraseña}
                 onChange={(e) => setPasswordForm((prev) => ({ ...prev, contraseña: e.target.value }))}
-                placeholder="Minimo 8 caracteres"
+                placeholder="Mínimo 8 caracteres"
               />
             </div>
 
