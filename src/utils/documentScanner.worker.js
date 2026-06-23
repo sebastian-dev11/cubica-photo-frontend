@@ -1,19 +1,19 @@
+/* eslint-env worker */
+/* eslint-disable no-restricted-globals */
+
 let cvReadyPromise = null;
+
+const workerScope = self;
 
 function loadScript(src) {
   return new Promise((resolve, reject) => {
     try {
-      const script = self.document?.createElement?.('script');
-
-      if (script) {
-        script.src = src;
-        script.onload = resolve;
-        script.onerror = reject;
-        self.document.body.appendChild(script);
+      if (typeof workerScope.importScripts !== 'function') {
+        reject(new Error('Este navegador no permite cargar OpenCV en segundo plano.'));
         return;
       }
 
-      importScripts(src);
+      workerScope.importScripts(src);
       resolve();
     } catch (error) {
       reject(error);
@@ -26,13 +26,13 @@ function waitForOpenCv(timeout = 30000) {
     const startedAt = Date.now();
 
     const check = () => {
-      if (self.cv && self.cv.Mat) {
-        resolve(self.cv);
+      if (workerScope.cv && workerScope.cv.Mat) {
+        resolve(workerScope.cv);
         return;
       }
 
-      if (self.cv && typeof self.cv.onRuntimeInitialized !== 'undefined') {
-        self.cv.onRuntimeInitialized = () => resolve(self.cv);
+      if (workerScope.cv && typeof workerScope.cv.onRuntimeInitialized !== 'undefined') {
+        workerScope.cv.onRuntimeInitialized = () => resolve(workerScope.cv);
         return;
       }
 
@@ -41,7 +41,7 @@ function waitForOpenCv(timeout = 30000) {
         return;
       }
 
-      setTimeout(check, 100);
+      workerScope.setTimeout(check, 100);
     };
 
     check();
@@ -49,34 +49,30 @@ function waitForOpenCv(timeout = 30000) {
 }
 
 async function loadOpenCv(src) {
-  if (self.cv && self.cv.Mat) {
-    return self.cv;
+  if (workerScope.cv && workerScope.cv.Mat) {
+    return workerScope.cv;
   }
 
   if (cvReadyPromise) {
     return cvReadyPromise;
   }
 
-  cvReadyPromise = new Promise(async (resolve, reject) => {
-    try {
-      await loadScript(src);
-      const cv = await waitForOpenCv();
-      resolve(cv);
-    } catch (error) {
+  cvReadyPromise = loadScript(src)
+    .then(() => waitForOpenCv())
+    .catch((error) => {
       cvReadyPromise = null;
-      reject(error);
-    }
-  });
+      throw error;
+    });
 
   return cvReadyPromise;
 }
 
 function createCanvas(width, height) {
-  if (typeof OffscreenCanvas !== 'undefined') {
-    return new OffscreenCanvas(width, height);
+  if (typeof workerScope.OffscreenCanvas === 'undefined') {
+    throw new Error('Este navegador no soporta escaneo avanzado en segundo plano.');
   }
 
-  throw new Error('Este navegador no soporta escaneo avanzado en segundo plano.');
+  return new workerScope.OffscreenCanvas(width, height);
 }
 
 function orderPoints(points) {
@@ -253,10 +249,7 @@ function warpDocument(cv, src, points) {
       new cv.Scalar(255, 255, 255, 255)
     );
 
-    const canvas = createCanvas(targetWidth, targetHeight);
-    cv.imshow(canvas, dst);
-
-    return canvas;
+    return dst.clone();
   } finally {
     srcTri.delete();
     dstTri.delete();
@@ -265,23 +258,70 @@ function warpDocument(cv, src, points) {
   }
 }
 
-function enhanceCanvas(canvas, options = {}) {
-  const mode = options.mode || 'natural';
-  const output = createCanvas(canvas.width, canvas.height);
-  const ctx = output.getContext('2d');
+function matToImageData(mat) {
+  return new workerScope.ImageData(
+    new Uint8ClampedArray(mat.data),
+    mat.cols,
+    mat.rows
+  );
+}
+
+function enhanceImageData(imageData, mode = 'natural') {
+  const data = imageData.data;
+
+  let brightness = 1.04;
+  let contrast = 1.06;
+  let saturation = 0.9;
 
   if (mode === 'clean') {
-    ctx.filter = 'brightness(1.1) contrast(1.12) saturate(0.55)';
-  } else if (mode === 'bn') {
-    ctx.filter = 'grayscale(1) brightness(1.08) contrast(1.16)';
-  } else {
-    ctx.filter = 'brightness(1.04) contrast(1.06) saturate(0.9)';
+    brightness = 1.1;
+    contrast = 1.12;
+    saturation = 0.55;
   }
 
-  ctx.drawImage(canvas, 0, 0);
-  ctx.filter = 'none';
+  if (mode === 'bn') {
+    brightness = 1.08;
+    contrast = 1.16;
+    saturation = 0;
+  }
 
-  return output;
+  const contrastFactor = contrast;
+  const intercept = 128 * (1 - contrastFactor);
+
+  for (let i = 0; i < data.length; i += 4) {
+    let r = data[i] * brightness;
+    let g = data[i + 1] * brightness;
+    let b = data[i + 2] * brightness;
+
+    r = r * contrastFactor + intercept;
+    g = g * contrastFactor + intercept;
+    b = b * contrastFactor + intercept;
+
+    const luma = 0.299 * r + 0.587 * g + 0.114 * b;
+
+    if (mode === 'bn') {
+      const value = luma >= 164 ? 255 : 0;
+      data[i] = value;
+      data[i + 1] = value;
+      data[i + 2] = value;
+      continue;
+    }
+
+    data[i] = Math.max(0, Math.min(255, luma + (r - luma) * saturation));
+    data[i + 1] = Math.max(0, Math.min(255, luma + (g - luma) * saturation));
+    data[i + 2] = Math.max(0, Math.min(255, luma + (b - luma) * saturation));
+  }
+
+  return imageData;
+}
+
+function imageDataToCanvas(imageData) {
+  const canvas = createCanvas(imageData.width, imageData.height);
+  const ctx = canvas.getContext('2d');
+
+  ctx.putImageData(imageData, 0, 0);
+
+  return canvas;
 }
 
 function resizeCanvas(canvas, options = {}) {
@@ -299,6 +339,7 @@ function resizeCanvas(canvas, options = {}) {
   );
 
   const ctx = output.getContext('2d');
+
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(canvas, 0, 0, output.width, output.height);
@@ -306,37 +347,58 @@ function resizeCanvas(canvas, options = {}) {
   return output;
 }
 
-async function scanImageBitmap(imageBitmap, options = {}) {
-  const cv = await loadOpenCv(options.opencvSrc || '/opencv/opencv.js');
+async function createMatFromFile(cv, file, options = {}) {
+  if (typeof workerScope.createImageBitmap !== 'function') {
+    throw new Error('Este navegador no soporta lectura avanzada de imagen.');
+  }
 
-  const maxInputSize = options.maxInputSize || 1800;
+  const imageBitmap = await workerScope.createImageBitmap(file);
+  const maxInputSize = options.maxInputSize || 1600;
   const ratio = Math.min(1, maxInputSize / Math.max(imageBitmap.width, imageBitmap.height));
-  const inputCanvas = createCanvas(
-    Math.max(1, Math.round(imageBitmap.width * ratio)),
-    Math.max(1, Math.round(imageBitmap.height * ratio))
-  );
+  const width = Math.max(1, Math.round(imageBitmap.width * ratio));
+  const height = Math.max(1, Math.round(imageBitmap.height * ratio));
+  const canvas = createCanvas(width, height);
+  const ctx = canvas.getContext('2d');
 
-  const inputCtx = inputCanvas.getContext('2d');
-  inputCtx.imageSmoothingEnabled = true;
-  inputCtx.imageSmoothingQuality = 'high';
-  inputCtx.drawImage(imageBitmap, 0, 0, inputCanvas.width, inputCanvas.height);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(imageBitmap, 0, 0, width, height);
 
-  const src = cv.imread(inputCanvas);
+  const imageData = ctx.getImageData(0, 0, width, height);
+
+  imageBitmap.close();
+
+  return cv.matFromImageData(imageData);
+}
+
+async function scanFile(file, options = {}) {
+  const cv = await loadOpenCv(options.opencvSrc || '/opencv/opencv.js');
+  const src = await createMatFromFile(cv, file, options);
+
+  let outputMat = null;
 
   try {
     const points = detectDocumentPoints(cv, src, options);
-    let outputCanvas = inputCanvas;
     let method = 'original';
     let documentDetected = false;
 
     if (points) {
-      outputCanvas = warpDocument(cv, src, points);
+      outputMat = warpDocument(cv, src, points);
       method = 'perspective';
       documentDetected = true;
+    } else {
+      outputMat = src.clone();
     }
 
-    outputCanvas = enhanceCanvas(outputCanvas, options);
-    outputCanvas = resizeCanvas(outputCanvas, options);
+    const imageData = enhanceImageData(
+      matToImageData(outputMat),
+      options.mode || 'natural'
+    );
+
+    const outputCanvas = resizeCanvas(
+      imageDataToCanvas(imageData),
+      options
+    );
 
     const blob = await outputCanvas.convertToBlob({
       type: 'image/jpeg',
@@ -352,11 +414,14 @@ async function scanImageBitmap(imageBitmap, options = {}) {
     };
   } finally {
     src.delete();
-    imageBitmap.close();
+
+    if (outputMat) {
+      outputMat.delete();
+    }
   }
 }
 
-self.onmessage = async (event) => {
+workerScope.onmessage = async (event) => {
   const { id, file, options } = event.data || {};
 
   try {
@@ -364,16 +429,15 @@ self.onmessage = async (event) => {
       throw new Error('No se recibió imagen para escanear.');
     }
 
-    const imageBitmap = await createImageBitmap(file);
-    const result = await scanImageBitmap(imageBitmap, options || {});
+    const result = await scanFile(file, options || {});
 
-    self.postMessage({
+    workerScope.postMessage({
       id,
       ok: true,
       result
     });
   } catch (error) {
-    self.postMessage({
+    workerScope.postMessage({
       id,
       ok: false,
       error: error.message || 'No se pudo escanear el acta.'
