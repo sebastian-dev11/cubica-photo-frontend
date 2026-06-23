@@ -1,6 +1,9 @@
+/* eslint-env worker */
+/* eslint-disable no-restricted-globals */
+
 let cvReadyPromise = null;
 
-const workerScope = Function('return this')();
+const workerScope = self;
 
 function postProgress(id, step, detail) {
   if (!id) return;
