@@ -364,7 +364,6 @@ const useIsMobile = () => {
   return isMobile;
 };
 
-
 function obtenerUbicacionActual() {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) {
@@ -403,22 +402,22 @@ function normalizarUbicacion(position) {
 
 function getMensajeGeoError(error) {
   if (error?.message === 'geolocation_unavailable') {
-    return 'Este dispositivo no tiene geolocalizacion disponible.';
+    return 'Este dispositivo no tiene geolocalización disponible.';
   }
 
   if (error?.code === 1) {
-    return 'Permiso de ubicacion denegado. El informe se puede generar sin GPS.';
+    return 'Permiso de ubicación denegado. El informe se puede generar sin GPS.';
   }
 
   if (error?.code === 2) {
-    return 'No se pudo obtener la ubicacion actual. Revisa el GPS del dispositivo.';
+    return 'No se pudo obtener la ubicación actual. Revisa el GPS del dispositivo.';
   }
 
   if (error?.code === 3) {
-    return 'La ubicacion tardo demasiado. Puedes intentar nuevamente.';
+    return 'La ubicación tardó demasiado. Puedes intentar nuevamente.';
   }
 
-  return 'No se pudo obtener la ubicacion.';
+  return 'No se pudo obtener la ubicación.';
 }
 
 async function serverResetSession(curId) {
@@ -427,7 +426,7 @@ async function serverResetSession(curId) {
   try {
     await http.post(`/pdf/session/reset/${encodeURIComponent(curId)}`);
   } catch (e) {
-    console.error('No se pudo resetear la sesion en servidor:', e);
+    console.error('No se pudo resetear la sesión en servidor:', e);
   }
 }
 
@@ -455,7 +454,7 @@ const DashboardPage = () => {
   const [sesionId, setSesionId] = useState(() => localStorage.getItem('sesionId') || '');
   const [numeroIncidencia, setNumeroIncidencia] = useState(() => localStorage.getItem('numeroIncidencia') || '');
   const token = localStorage.getItem('token') || '';
-  const nombreTecnico = localStorage.getItem('nombreTecnico') || 'Tecnico';
+  const nombreTecnico = localStorage.getItem('nombreTecnico') || 'Técnico';
   const isAdmin = localStorage.getItem('isAdmin') === '1' || localStorage.getItem('isAdmin') === 'true';
 
   const [imagen, setImagen] = useState(null);
@@ -500,6 +499,8 @@ const DashboardPage = () => {
   const [searchText, setSearchText] = useState('');
   const [tiendaSuggestOpen, setTiendaSuggestOpen] = useState(false);
   const [showVersionNotes, setShowVersionNotes] = useState(false);
+  const [geoConfirmOpen, setGeoConfirmOpen] = useState(false);
+  const geoConfirmResolveRef = useRef(null);
 
   useEffect(() => {
     if (!token || !sesionId) {
@@ -513,6 +514,15 @@ const DashboardPage = () => {
     if (versionVista !== APP_VERSION) {
       setShowVersionNotes(true);
     }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (geoConfirmResolveRef.current) {
+        geoConfirmResolveRef.current(false);
+        geoConfirmResolveRef.current = null;
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -623,11 +633,17 @@ const DashboardPage = () => {
     setCntPrevias(0);
     setCntPosteriores(0);
     setActaOK(false);
+    setGeolocalizacion(null);
+    setGeoStatus('idle');
+    setGeoMessage('');
   };
 
   useEffect(() => {
     if (selectedTienda && !filteredTiendas.some((t) => t._id === selectedTienda)) {
       setSelectedTienda('');
+      setGeolocalizacion(null);
+      setGeoStatus('idle');
+      setGeoMessage('');
     }
   }, [filteredTiendas, selectedTienda]);
 
@@ -718,6 +734,9 @@ const DashboardPage = () => {
     setSearchText('');
     setSelectedTienda('');
     setTiendaSuggestOpen(false);
+    setGeolocalizacion(null);
+    setGeoStatus('idle');
+    setGeoMessage('');
   };
 
   const clearEvid = (e) => {
@@ -779,14 +798,14 @@ const DashboardPage = () => {
     const invalidas = files.filter((file) => !file.type?.startsWith('image/'));
 
     if (invalidas.length > 0) {
-      setMensaje('Todos los archivos seleccionados deben ser imagenes');
+      setMensaje('Todos los archivos seleccionados deben ser imágenes');
       setImagen(null);
       setImagenesEvidencia([]);
       return;
     }
 
     try {
-      setMensaje(files.length > 1 ? `Optimizando ${files.length} imagenes...` : 'Optimizando imagen...');
+      setMensaje(files.length > 1 ? `Optimizando ${files.length} imágenes...` : 'Optimizando imagen...');
 
       const optimized = await optimizeMany(files, {
         maxWidth: 1600,
@@ -797,10 +816,10 @@ const DashboardPage = () => {
 
       setImagenesEvidencia(optimized);
       setImagen(optimized[0] || null);
-      setMensaje(files.length > 1 ? `${files.length} imagenes listas para subir` : '');
+      setMensaje(files.length > 1 ? `${files.length} imágenes listas para subir` : '');
     } catch (err) {
       console.error(err);
-      setMensaje('No se pudieron optimizar las imagenes. Se intentara subir los archivos originales.');
+      setMensaje('No se pudieron optimizar las imágenes. Se intentarán subir los archivos originales.');
       setImagenesEvidencia(files);
       setImagen(files[0] || null);
     }
@@ -819,7 +838,7 @@ const DashboardPage = () => {
     const tipoEnviado = tipo;
 
     setCargando(true);
-    setMensaje(imagenesParaSubir.length > 1 ? `Subiendo ${imagenesParaSubir.length} imagenes...` : 'Subiendo imagen...');
+    setMensaje(imagenesParaSubir.length > 1 ? `Subiendo ${imagenesParaSubir.length} imágenes...` : 'Subiendo imagen...');
 
     try {
       let subidas = 0;
@@ -847,8 +866,8 @@ const DashboardPage = () => {
 
       setMensaje(
         subidas === 1
-          ? 'Imagen y observacion enviadas correctamente'
-          : `${subidas} imagenes ${tipoEnviado === 'previa' ? 'previas' : 'posteriores'} enviadas correctamente`
+          ? 'Imagen y observación enviadas correctamente'
+          : `${subidas} imágenes ${tipoEnviado === 'previa' ? 'previas' : 'posteriores'} enviadas correctamente`
       );
 
       setImagen(null);
@@ -885,7 +904,7 @@ const DashboardPage = () => {
 
     if (actaImgs.length > 0) {
       try {
-        setMensajeActa('Optimizando imagenes del acta...');
+        setMensajeActa('Optimizando imágenes del acta...');
 
         imgsParaSubir = await optimizeMany(actaImgs, {
           maxWidth: 1600,
@@ -894,7 +913,7 @@ const DashboardPage = () => {
           fallbacks: [{ maxWidth: 1280, quality: 0.7 }]
         });
       } catch (err) {
-        console.error('Fallo optimizando imagenes del acta:', err);
+        console.error('Falló optimizando imágenes del acta:', err);
       }
     }
 
@@ -912,27 +931,47 @@ const DashboardPage = () => {
       setTimeout(() => setMensajeActa(''), 3000);
     } catch (error) {
       console.error(error);
-      setMensajeActa(error?.response?.data?.mensaje || error?.response?.data?.error || 'Error en la conexion con el servidor');
+      setMensajeActa(error?.response?.data?.mensaje || error?.response?.data?.error || 'Error en la conexión con el servidor');
     } finally {
       setCargandoActa(false);
     }
   };
 
+  const pedirConfirmacionGeolocalizacion = () => {
+    if (geoConfirmResolveRef.current) {
+      geoConfirmResolveRef.current(false);
+    }
+
+    return new Promise((resolve) => {
+      geoConfirmResolveRef.current = resolve;
+      setGeoConfirmOpen(true);
+    });
+  };
+
+  const responderConfirmacionGeolocalizacion = (respuesta) => {
+    if (geoConfirmResolveRef.current) {
+      geoConfirmResolveRef.current(respuesta);
+    }
+
+    geoConfirmResolveRef.current = null;
+    setGeoConfirmOpen(false);
+  };
+
   const solicitarGeolocalizacion = async () => {
     if (!navigator.geolocation) {
       setGeoStatus('unavailable');
-      setGeoMessage('Este dispositivo no tiene geolocalizacion disponible.');
+      setGeoMessage('Este dispositivo no tiene geolocalización disponible.');
       return null;
     }
 
     if (!window.isSecureContext && window.location.hostname !== 'localhost') {
       setGeoStatus('unavailable');
-      setGeoMessage('La geolocalizacion requiere HTTPS para funcionar.');
+      setGeoMessage('La geolocalización requiere HTTPS para funcionar.');
       return null;
     }
 
     setGeoStatus('loading');
-    setGeoMessage('Solicitando ubicacion GPS...');
+    setGeoMessage('Solicitando ubicación GPS...');
 
     try {
       const position = await obtenerUbicacionActual();
@@ -940,14 +979,14 @@ const DashboardPage = () => {
 
       if (!geo) {
         setGeoStatus('error');
-        setGeoMessage('No se pudo leer la ubicacion del dispositivo.');
+        setGeoMessage('No se pudo leer la ubicación del dispositivo.');
         return null;
       }
 
       const precisionTexto =
         geo.precision !== null
-          ? `Precision aproximada: ${Math.round(geo.precision)} m`
-          : 'Ubicacion capturada correctamente';
+          ? `Precisión aproximada: ${Math.round(geo.precision)} m`
+          : 'Ubicación capturada correctamente';
 
       setGeolocalizacion(geo);
       setGeoStatus('ready');
@@ -955,7 +994,7 @@ const DashboardPage = () => {
 
       return geo;
     } catch (error) {
-      console.error('Error obteniendo geolocalizacion:', error);
+      console.error('Error obteniendo geolocalización:', error);
 
       const msg = getMensajeGeoError(error);
 
@@ -964,6 +1003,19 @@ const DashboardPage = () => {
 
       return null;
     }
+  };
+
+  const confirmarYCapturarGeolocalizacion = async () => {
+    const estaEnTienda = await pedirConfirmacionGeolocalizacion();
+
+    if (!estaEnTienda) {
+      setGeolocalizacion(null);
+      setGeoStatus('skipped');
+      setGeoMessage('No se capturó la ubicación porque indicaste que no estás en la tienda. El informe se generará sin GPS.');
+      return null;
+    }
+
+    return await solicitarGeolocalizacion();
   };
 
   const handleGenerarPDF = async () => {
@@ -990,7 +1042,7 @@ const DashboardPage = () => {
       let geoParaInforme = geolocalizacion;
 
       if (!geoParaInforme) {
-        geoParaInforme = await solicitarGeolocalizacion();
+        geoParaInforme = await confirmarYCapturarGeolocalizacion();
       }
 
       const params = {
@@ -1079,14 +1131,14 @@ const DashboardPage = () => {
     }));
 
     const tiendaLabel = (tiendaOptsLocal.find((o) => o.value === selectedTienda)?.label || '').trim();
-    const texto = `Informe tecnico${tiendaLabel ? ` - ${tiendaLabel}` : ''}\n${genUrl}`;
+    const texto = `Informe técnico${tiendaLabel ? ` - ${tiendaLabel}` : ''}\n${genUrl}`;
     const waUrl = `https://wa.me/?text=${encodeURIComponent(texto)}`;
 
     const cleanupAll = async () => {
       try {
         await serverResetSession(sesionId);
       } catch (e) {
-        console.error('Fallo limpieza backend en compartir:', e);
+        console.error('Falló limpieza backend en compartir:', e);
       }
 
       try {
@@ -1118,7 +1170,7 @@ const DashboardPage = () => {
     try {
       await serverResetSession(sesionId);
     } catch (e) {
-      console.error('Fallo limpieza backend al cerrar sesion:', e);
+      console.error('Falló limpieza backend al cerrar sesión:', e);
     }
 
     try {
@@ -1170,7 +1222,8 @@ const DashboardPage = () => {
 
   const goNext = () => setStep((s) => Math.min(5, s + 1));
   const goBack = () => setStep((s) => Math.max(1, s - 1));
-    return (
+
+  return (
     <div className="dash-root">
       <header className="topbar">
         <div>
@@ -1196,7 +1249,7 @@ const DashboardPage = () => {
           )}
 
           <button type="button" className="btn danger" onClick={handleCerrarSesion}>
-            Cerrar sesion
+            Cerrar sesión
           </button>
         </div>
       </header>
@@ -1204,13 +1257,13 @@ const DashboardPage = () => {
       <main className="dash-container">
         <section className="hero">
           <div>
-            <h2>Generacion de informe tecnico</h2>
-            <p>Completa los pasos para generar el PDF con evidencia fotografica.</p>
+            <h2>Generación de informe técnico</h2>
+            <p>Completa los pasos para generar el PDF con evidencia fotográfica.</p>
           </div>
 
           <div className="session-chip">
-            <span>Sesion</span>
-            <strong>{sesionId || 'Sin sesion'}</strong>
+            <span>Sesión</span>
+            <strong>{sesionId || 'Sin sesión'}</strong>
           </div>
         </section>
 
@@ -1224,8 +1277,8 @@ const DashboardPage = () => {
 
         {step === 1 && (
           <section className="card step-card">
-            <h3>Numero de incidencia</h3>
-            <p>Ingresa el numero de incidencia que aparecera en el informe.</p>
+            <h3>Número de incidencia</h3>
+            <p>Ingresa el número de incidencia que aparecerá en el informe.</p>
 
             <div className="field">
               <label>Incidencia</label>
@@ -1247,8 +1300,8 @@ const DashboardPage = () => {
 
         {step === 2 && (
           <section className="card step-card">
-            <h3>Seleccion de tienda</h3>
-            <p>Filtra y selecciona la tienda donde se realizo la instalacion.</p>
+            <h3>Selección de tienda</h3>
+            <p>Filtra y selecciona la tienda donde se realizó la instalación.</p>
 
             <div className="filters-grid">
               <div className="field">
@@ -1260,6 +1313,9 @@ const DashboardPage = () => {
                     setFiltroDepartamento('');
                     setFiltroCiudad('');
                     setSelectedTienda('');
+                    setGeolocalizacion(null);
+                    setGeoStatus('idle');
+                    setGeoMessage('');
                   }}
                   options={[
                     { value: '', label: 'Todas las regionales' },
@@ -1278,6 +1334,9 @@ const DashboardPage = () => {
                     setFiltroCiudad(val);
                     setFiltroDepartamento('');
                     setSelectedTienda('');
+                    setGeolocalizacion(null);
+                    setGeoStatus('idle');
+                    setGeoMessage('');
                   }}
                   options={[
                     { value: '', label: 'Todas las ciudades' },
@@ -1295,6 +1354,9 @@ const DashboardPage = () => {
                   onChange={(val) => {
                     setFiltroDepartamento(val);
                     setSelectedTienda('');
+                    setGeolocalizacion(null);
+                    setGeoStatus('idle');
+                    setGeoMessage('');
                   }}
                   options={[
                     { value: '', label: 'Todos los departamentos' },
@@ -1317,6 +1379,9 @@ const DashboardPage = () => {
                     setSearchText(e.target.value);
                     setTiendaSuggestOpen(true);
                     setSelectedTienda('');
+                    setGeolocalizacion(null);
+                    setGeoStatus('idle');
+                    setGeoMessage('');
                   }}
                   onFocus={() => setTiendaSuggestOpen(true)}
                   onBlur={() => {
@@ -1367,7 +1432,7 @@ const DashboardPage = () => {
 
             <div className="actions between">
               <button type="button" className="btn secondary" onClick={goBack}>
-                Atras
+                Atrás
               </button>
 
               <div className="right-actions">
@@ -1385,8 +1450,8 @@ const DashboardPage = () => {
 
         {step === 3 && (
           <section className="card step-card">
-            <h3>Evidencia fotografica</h3>
-            <p>Sube imagenes previas y posteriores de la instalacion.</p>
+            <h3>Evidencia fotográfica</h3>
+            <p>Sube imágenes previas y posteriores de la instalación.</p>
 
             <div className="counter-grid">
               <div className={`counter-box ${bumpPrev ? 'bump' : ''}`}>
@@ -1416,7 +1481,7 @@ const DashboardPage = () => {
               </div>
 
               <div className="field">
-                <label>Observacion</label>
+                <label>Observación</label>
                 <textarea
                   value={observacion}
                   onChange={(e) => setObservacion(e.target.value)}
@@ -1439,10 +1504,10 @@ const DashboardPage = () => {
                   <img src={evidPreviewUrl} alt="Vista previa evidencia" />
                 ) : (
                   <div className="file-placeholder">
-                    <strong>Seleccionar imagenes</strong>
+                    <strong>Seleccionar imágenes</strong>
                     <span>
                       {imagenesEvidencia.length > 0
-                        ? `${imagenesEvidencia.length} imagenes seleccionadas`
+                        ? `${imagenesEvidencia.length} imágenes seleccionadas`
                         : 'JPG, PNG o imagen compatible'}
                     </span>
                   </div>
@@ -1450,7 +1515,7 @@ const DashboardPage = () => {
 
                 {imagenesEvidencia.length > 1 && (
                   <div className="file-count">
-                    {imagenesEvidencia.length} imagenes seleccionadas
+                    {imagenesEvidencia.length} imágenes seleccionadas
                   </div>
                 )}
 
@@ -1465,7 +1530,7 @@ const DashboardPage = () => {
 
               <div className="actions between">
                 <button type="button" className="btn secondary" onClick={goBack}>
-                  Atras
+                  Atrás
                 </button>
 
                 <div className="right-actions">
@@ -1473,7 +1538,7 @@ const DashboardPage = () => {
                     {cargando
                       ? 'Subiendo...'
                       : imagenesEvidencia.length > 1
-                        ? 'Subir imagenes'
+                        ? 'Subir imágenes'
                         : 'Subir imagen'}
                   </button>
 
@@ -1489,7 +1554,7 @@ const DashboardPage = () => {
         {step === 4 && (
           <section className="card step-card">
             <h3>Acta o soporte</h3>
-            <p>Adjunta un PDF o imagenes del acta si aplica.</p>
+            <p>Adjunta un PDF o imágenes del acta si aplica.</p>
 
             <form onSubmit={handleSubirActa} className="upload-form">
               <input
@@ -1535,8 +1600,8 @@ const DashboardPage = () => {
                     <img src={imgPreviewUrl} alt="Vista previa acta" />
                   ) : (
                     <div className="file-placeholder">
-                      <strong>Seleccionar imagenes</strong>
-                      <span>{actaImgs.length > 0 ? `${actaImgs.length} imagenes seleccionadas` : 'Acta en imagen'}</span>
+                      <strong>Seleccionar imágenes</strong>
+                      <span>{actaImgs.length > 0 ? `${actaImgs.length} imágenes seleccionadas` : 'Acta en imagen'}</span>
                     </div>
                   )}
 
@@ -1558,7 +1623,7 @@ const DashboardPage = () => {
 
               <div className="actions between">
                 <button type="button" className="btn secondary" onClick={goBack}>
-                  Atras
+                  Atrás
                 </button>
 
                 <div className="right-actions">
@@ -1578,7 +1643,7 @@ const DashboardPage = () => {
         {step === 5 && (
           <section className="card step-card">
             <h3>Generar informe</h3>
-            <p>Verifica la informacion y genera el PDF final.</p>
+            <p>Verifica la información y genera el PDF final.</p>
 
             <div className="summary-grid">
               <div>
@@ -1604,28 +1669,28 @@ const DashboardPage = () => {
 
             <div className={`geo-box ${geoStatus}`}>
               <div>
-                <span>Geolocalizacion</span>
+                <span>Geolocalización</span>
                 <strong>
                   {geolocalizacion
                     ? `${geolocalizacion.latitud.toFixed(6)}, ${geolocalizacion.longitud.toFixed(6)}`
-                    : 'Sin ubicacion capturada'}
+                    : 'Sin ubicación capturada'}
                 </strong>
                 <p>
-                  {geoMessage || 'La ubicacion se solicitara al generar el informe.'}
+                  {geoMessage || 'La ubicación se solicitará al generar el informe.'}
                 </p>
               </div>
 
               <button
                 type="button"
                 className="btn ghost"
-                onClick={solicitarGeolocalizacion}
+                onClick={confirmarYCapturarGeolocalizacion}
                 disabled={geoStatus === 'loading' || genLoading}
               >
                 {geoStatus === 'loading'
                   ? 'Solicitando...'
                   : geolocalizacion
-                    ? 'Actualizar ubicacion'
-                    : 'Capturar ubicacion'}
+                    ? 'Actualizar ubicación'
+                    : 'Capturar ubicación'}
               </button>
             </div>
 
@@ -1642,7 +1707,7 @@ const DashboardPage = () => {
 
             <div className="actions between">
               <button type="button" className="btn secondary" onClick={goBack}>
-                Atras
+                Atrás
               </button>
 
               <div className="right-actions">
@@ -1675,10 +1740,60 @@ const DashboardPage = () => {
         </button>
       )}
 
+      {geoConfirmOpen && createPortal(
+        <div className="geo-modal-backdrop" role="presentation">
+          <div
+            className="geo-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="geo-confirm-title"
+            aria-describedby="geo-confirm-description"
+          >
+            <div className="geo-modal-badge">GPS</div>
+
+            <h3 id="geo-confirm-title">Confirmar ubicación</h3>
+
+            <p id="geo-confirm-description">
+              ¿Te encuentras en la tienda donde realizaste el mantenimiento en este momento?
+            </p>
+
+            {selectedTiendaObj && (
+              <div className="geo-store-card">
+                <span>Tienda seleccionada</span>
+                <strong>{selectedTiendaObj.nombre}</strong>
+                <p>
+                  {selectedTiendaObj.regional ? `${selectedTiendaObj.regional} | ` : ''}
+                  {selectedTiendaObj.departamento}, {selectedTiendaObj.ciudad}
+                </p>
+              </div>
+            )}
+
+            <div className="geo-modal-actions">
+              <button
+                type="button"
+                className="btn secondary"
+                onClick={() => responderConfirmacionGeolocalizacion(false)}
+              >
+                No, generar sin GPS
+              </button>
+
+              <button
+                type="button"
+                className="btn primary"
+                onClick={() => responderConfirmacionGeolocalizacion(true)}
+              >
+                Sí, capturar ubicación
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
       {showVersionNotes && createPortal(
         <div className="version-modal-backdrop" role="presentation">
           <div className="version-modal" role="dialog" aria-modal="true" aria-labelledby="version-notes-title">
-            <div className="version-pill">Version {VERSION_NOTES.version}</div>
+            <div className="version-pill">Versión {VERSION_NOTES.version}</div>
             <h3 id="version-notes-title">{VERSION_NOTES.title}</h3>
             <p>{VERSION_NOTES.subtitle}</p>
 
@@ -2284,7 +2399,8 @@ const DashboardPage = () => {
         }
 
         .geo-box.error,
-        .geo-box.unavailable {
+        .geo-box.unavailable,
+        .geo-box.skipped {
           background: rgba(255, 174, 0, 0.11);
           border-color: rgba(255, 174, 0, 0.24);
         }
@@ -2438,6 +2554,98 @@ const DashboardPage = () => {
           font-size: 11px;
           color: #fff200;
           font-weight: 900;
+        }
+
+        .geo-modal-backdrop {
+          position: fixed;
+          inset: 0;
+          z-index: 10001;
+          padding: 18px;
+          background: rgba(0, 0, 0, 0.72);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          backdrop-filter: blur(12px);
+        }
+
+        .geo-modal {
+          width: min(100%, 500px);
+          max-height: min(88vh, 720px);
+          overflow: auto;
+          border-radius: 26px;
+          padding: 24px;
+          background: rgba(22, 24, 29, 0.98);
+          border: 1px solid rgba(255, 255, 255, 0.14);
+          box-shadow: 0 28px 90px rgba(0, 0, 0, 0.55);
+          color: #f4f4f5;
+          animation: enter 220ms ease-out;
+        }
+
+        .geo-modal-badge {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 32px;
+          padding: 0 14px;
+          border-radius: 999px;
+          background: rgba(255, 242, 0, 0.13);
+          border: 1px solid rgba(255, 242, 0, 0.26);
+          color: #fff200;
+          font-size: 12px;
+          font-weight: 900;
+          letter-spacing: 0.12em;
+          margin-bottom: 14px;
+        }
+
+        .geo-modal h3 {
+          margin: 0;
+          font-size: clamp(24px, 4vw, 34px);
+          letter-spacing: -0.04em;
+        }
+
+        .geo-modal > p {
+          margin: 10px 0 18px;
+          color: #c5c8ce;
+          line-height: 1.5;
+        }
+
+        .geo-store-card {
+          margin: 16px 0 0;
+          padding: 15px;
+          border-radius: 18px;
+          background: rgba(255, 242, 0, 0.11);
+          border: 1px solid rgba(255, 242, 0, 0.24);
+        }
+
+        .geo-store-card span {
+          display: block;
+          color: #fff200;
+          font-size: 12px;
+          font-weight: 900;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+          margin-bottom: 6px;
+        }
+
+        .geo-store-card strong {
+          display: block;
+          color: #fff;
+          font-size: 15px;
+          overflow-wrap: anywhere;
+        }
+
+        .geo-store-card p {
+          margin: 5px 0 0;
+          color: #c5c8ce;
+          font-size: 13px;
+        }
+
+        .geo-modal-actions {
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
+          gap: 10px;
+          margin-top: 22px;
         }
 
         .version-modal-backdrop {
@@ -2636,7 +2844,6 @@ const DashboardPage = () => {
           }
         }
 
-
         @media (max-width: 640px) {
           body {
             overflow-x: hidden;
@@ -2831,6 +3038,20 @@ const DashboardPage = () => {
             padding: 14px;
           }
 
+          .geo-modal {
+            border-radius: 24px;
+            padding: 20px;
+          }
+
+          .geo-modal-actions {
+            flex-direction: column-reverse;
+            align-items: stretch;
+          }
+
+          .geo-modal-actions .btn {
+            width: 100%;
+          }
+
           .dropdown-panel {
             left: 10px !important;
             right: 10px !important;
@@ -2866,7 +3087,6 @@ const DashboardPage = () => {
             font-size: 22px;
           }
         }
-
       `}</style>
     </div>
   );
