@@ -485,6 +485,7 @@ const DashboardPage = () => {
   const [cargando, setCargando] = useState(false);
   const [cargandoActa, setCargandoActa] = useState(false);
   const [escaneandoActa, setEscaneandoActa] = useState(false);
+  const [actaEscaneada, setActaEscaneada] = useState(false);
 
   const [genLoading, setGenLoading] = useState(false);
   const [genUrl, setGenUrl] = useState('');
@@ -778,6 +779,7 @@ const DashboardPage = () => {
 
     setActaImgs([]);
     setEscaneandoActa(false);
+    setActaEscaneada(false);
 
     if (!keepStatus) setActaOK(false);
 
@@ -888,10 +890,37 @@ const DashboardPage = () => {
     }
   };
 
+  const ejecutarConTiempoLimite = (promesa, ms, mensajeError) => {
+    let timer = null;
+
+    const timeout = new Promise((_, reject) => {
+      timer = window.setTimeout(() => reject(new Error(mensajeError)), ms);
+    });
+
+    return Promise.race([promesa, timeout]).finally(() => {
+      if (timer) window.clearTimeout(timer);
+    });
+  };
+
+  const prepararImagenActaOriginal = async (file) => {
+    try {
+      return await optimizeImage(file, {
+        maxWidth: 1800,
+        quality: 0.85,
+        format: 'image/jpeg',
+        fallbacks: [{ maxWidth: 1600, quality: 0.8 }]
+      });
+    } catch {
+      return file;
+    }
+  };
+
   const handleSeleccionarImagenesActa = async (e) => {
     const files = Array.from(e.target.files || []);
 
     setActaOK(false);
+    setActaEscaneada(false);
+    setEscaneandoActa(false);
 
     if (files.length === 0) {
       setActaImgs([]);
@@ -906,60 +935,89 @@ const DashboardPage = () => {
       return;
     }
 
-    setEscaneandoActa(true);
-    setMensajeActa(files.length > 1 ? `Escaneando ${files.length} imágenes del acta...` : 'Escaneando acta...');
+    setMensajeActa(files.length > 1 ? `Preparando ${files.length} imágenes del acta...` : 'Preparando imagen del acta...');
 
-    const imagenesProcesadas = [];
-    let escaneadas = 0;
+    const imagenesPreparadas = [];
 
     for (const file of files) {
-      try {
-        const result = await DocumentScanner.scanFile(file, {
-          mode: 'clean',
-          quality: 0.92,
-          maxInputSize: 2400,
-          maxWidth: 1800,
-          maxHeight: 2400
-        });
+      imagenesPreparadas.push(await prepararImagenActaOriginal(file));
+    }
 
-        imagenesProcesadas.push(result.file);
+    setActaImgs(imagenesPreparadas);
 
-        if (result.documentDetected) {
-          escaneadas += 1;
-        }
-      } catch (error) {
-        console.error('No se pudo escanear el acta:', error);
+    setMensajeActa(
+      imagenesPreparadas.length > 1
+        ? `${imagenesPreparadas.length} imágenes listas. Puedes subirlas así o escanearlas antes de subir.`
+        : 'Imagen lista. Puedes subirla así o escanearla antes de subir.'
+    );
+  };
 
+  const handleEscanearActaSeleccionada = async () => {
+    if (actaImgs.length === 0) {
+      setMensajeActa('Selecciona primero una imagen del acta');
+      return;
+    }
+
+    setActaOK(false);
+    setEscaneandoActa(true);
+    setMensajeActa(
+      actaImgs.length > 1
+        ? `Escaneando ${actaImgs.length} imágenes del acta. Este proceso puede tomar varios segundos.`
+        : 'Escaneando acta. Este proceso puede tomar varios segundos.'
+    );
+
+    const imagenesProcesadas = [];
+    let procesadas = 0;
+    let detectadas = 0;
+
+    try {
+      for (const file of actaImgs) {
         try {
-          const optimizada = await optimizeImage(file, {
-            maxWidth: 1800,
-            quality: 0.85,
-            format: 'image/jpeg',
-            fallbacks: [{ maxWidth: 1600, quality: 0.8 }]
-          });
+          const result = await ejecutarConTiempoLimite(
+            DocumentScanner.scanFile(file, {
+              mode: 'clean',
+              quality: 0.92,
+              maxInputSize: 2200,
+              maxWidth: 1800,
+              maxHeight: 2400,
+              timeout: 25000
+            }),
+            45000,
+            'El escaneo tardó demasiado.'
+          );
 
-          imagenesProcesadas.push(optimizada);
-        } catch {
+          imagenesProcesadas.push(result.file);
+          procesadas += 1;
+
+          if (result.documentDetected) {
+            detectadas += 1;
+          }
+        } catch (error) {
+          console.error('No se pudo escanear el acta:', error);
           imagenesProcesadas.push(file);
         }
       }
-    }
 
-    setActaImgs(imagenesProcesadas);
-    setEscaneandoActa(false);
+      setActaImgs(imagenesProcesadas);
+      setActaEscaneada(procesadas > 0);
 
-    if (escaneadas > 0) {
-      setMensajeActa(
-        imagenesProcesadas.length > 1
-          ? `${imagenesProcesadas.length} imágenes del acta escaneadas y listas para subir`
-          : 'Acta escaneada y lista para subir'
-      );
-    } else {
-      setMensajeActa(
-        imagenesProcesadas.length > 1
-          ? `${imagenesProcesadas.length} imágenes del acta listas para subir`
-          : 'Imagen del acta lista para subir'
-      );
+      if (procesadas > 0 && detectadas > 0) {
+        setMensajeActa(
+          imagenesProcesadas.length > 1
+            ? `${imagenesProcesadas.length} imágenes escaneadas. Algunas tuvieron corrección de perspectiva.`
+            : 'Acta escaneada con corrección de perspectiva.'
+        );
+      } else if (procesadas > 0) {
+        setMensajeActa(
+          imagenesProcesadas.length > 1
+            ? `${imagenesProcesadas.length} imágenes escaneadas. No se detectaron bordes claros en todas.`
+            : 'Acta escaneada. No se detectaron bordes claros para corregir perspectiva.'
+        );
+      } else {
+        setMensajeActa('No se pudo escanear automáticamente. Puedes subir la imagen original.');
+      }
+    } finally {
+      setEscaneandoActa(false);
     }
   };
 
@@ -982,7 +1040,7 @@ const DashboardPage = () => {
 
     imgsParaSubir.forEach((img) => formData.append('imagenes', img));
 
-    if (imgsParaSubir.length > 0) {
+    if (imgsParaSubir.length > 0 && actaEscaneada) {
       formData.append('procesada', 'true');
     }
 
@@ -1175,6 +1233,7 @@ const DashboardPage = () => {
     setCntPosteriores(0);
     setActaOK(false);
     setEscaneandoActa(false);
+    setActaEscaneada(false);
     setGenLoading(false);
     setGenUrl('');
     setGenErr('');
@@ -1257,6 +1316,7 @@ const DashboardPage = () => {
     setActaImgs([]);
     setActaOK(false);
     setEscaneandoActa(false);
+    setActaEscaneada(false);
     setCntPrevias(0);
     setCntPosteriores(0);
     setGenLoading(false);
@@ -1678,7 +1738,7 @@ const DashboardPage = () => {
                     <div className="scan-overlay">
                       <div className="scan-loader" />
                       <strong>Escaneando acta</strong>
-                      <span>Detectando documento y corrigiendo perspectiva...</span>
+                      <span>Este proceso puede tomar varios segundos. No cierres la ventana.</span>
                     </div>
                   )}
 
@@ -1688,6 +1748,11 @@ const DashboardPage = () => {
                     </button>
                   )}
                 </div>
+              </div>
+
+              <div className="scan-warning">
+                <strong>Advertencia</strong>
+                <span>Escanear el acta puede tomar varios segundos, especialmente en celulares o con fotos pesadas. También puedes subir la imagen original sin escanear.</span>
               </div>
 
               {mensajeActa && <p className="message">{mensajeActa}</p>}
@@ -1704,6 +1769,15 @@ const DashboardPage = () => {
                 </button>
 
                 <div className="right-actions">
+                  <button
+                    type="button"
+                    className="btn ghost"
+                    disabled={cargandoActa || escaneandoActa || actaImgs.length === 0}
+                    onClick={handleEscanearActaSeleccionada}
+                  >
+                    {escaneandoActa ? 'Escaneando...' : 'Escanear acta'}
+                  </button>
+
                   <button type="submit" className="btn primary" disabled={cargandoActa || escaneandoActa}>
                     {escaneandoActa ? 'Escaneando...' : cargandoActa ? 'Subiendo...' : 'Subir acta'}
                   </button>
@@ -2437,6 +2511,31 @@ const DashboardPage = () => {
           color: #c5c8ce;
           font-size: 13px;
           line-height: 1.35;
+        }
+
+        .scan-warning {
+          margin-top: 14px;
+          padding: 13px 14px;
+          border-radius: 16px;
+          background: rgba(255, 174, 0, 0.11);
+          border: 1px solid rgba(255, 174, 0, 0.24);
+          display: flex;
+          flex-direction: column;
+          gap: 5px;
+        }
+
+        .scan-warning strong {
+          color: #ffe08a;
+          font-size: 13px;
+          font-weight: 900;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+        }
+
+        .scan-warning span {
+          color: #f1f1f1;
+          font-size: 13px;
+          line-height: 1.4;
         }
 
         .dual-upload {
