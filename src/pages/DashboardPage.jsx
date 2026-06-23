@@ -975,12 +975,15 @@ const DashboardPage = () => {
         try {
           const result = await ejecutarConTiempoLimite(
             DocumentScanner.scanFile(file, {
-              mode: 'clean',
-              quality: 0.92,
-              maxInputSize: 2200,
-              maxWidth: 1800,
-              maxHeight: 2400,
-              timeout: 25000
+              mode: 'natural',
+  workerTimeout: 180000,
+  maxInputSize: 1600,
+  maxWidth: 1600,
+  maxHeight: 2400,
+  quality: 0.92,
+  minAreaRatio: 0.1,
+  cannyLow: 35,
+  cannyHigh: 110
             }),
             45000,
             'El escaneo tardó demasiado.'
