@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { http } from '../services/http';
+import DocumentScanner from '../utils/documentScanner';
 
 const APP_VERSION = '1.4.0';
 
@@ -483,6 +484,7 @@ const DashboardPage = () => {
   const [mensajeActa, setMensajeActa] = useState('');
   const [cargando, setCargando] = useState(false);
   const [cargandoActa, setCargandoActa] = useState(false);
+  const [escaneandoActa, setEscaneandoActa] = useState(false);
 
   const [genLoading, setGenLoading] = useState(false);
   const [genUrl, setGenUrl] = useState('');
@@ -775,6 +777,7 @@ const DashboardPage = () => {
     const keepStatus = !!opts.keepStatus;
 
     setActaImgs([]);
+    setEscaneandoActa(false);
 
     if (!keepStatus) setActaOK(false);
 
@@ -885,6 +888,81 @@ const DashboardPage = () => {
     }
   };
 
+  const handleSeleccionarImagenesActa = async (e) => {
+    const files = Array.from(e.target.files || []);
+
+    setActaOK(false);
+
+    if (files.length === 0) {
+      setActaImgs([]);
+      return;
+    }
+
+    const invalidas = files.filter((file) => !file.type?.startsWith('image/'));
+
+    if (invalidas.length > 0) {
+      setMensajeActa('Todos los archivos seleccionados deben ser imágenes');
+      setActaImgs([]);
+      return;
+    }
+
+    setEscaneandoActa(true);
+    setMensajeActa(files.length > 1 ? `Escaneando ${files.length} imágenes del acta...` : 'Escaneando acta...');
+
+    const imagenesProcesadas = [];
+    let escaneadas = 0;
+
+    for (const file of files) {
+      try {
+        const result = await DocumentScanner.scanFile(file, {
+          mode: 'clean',
+          quality: 0.92,
+          maxInputSize: 2400,
+          maxWidth: 1800,
+          maxHeight: 2400
+        });
+
+        imagenesProcesadas.push(result.file);
+
+        if (result.documentDetected) {
+          escaneadas += 1;
+        }
+      } catch (error) {
+        console.error('No se pudo escanear el acta:', error);
+
+        try {
+          const optimizada = await optimizeImage(file, {
+            maxWidth: 1800,
+            quality: 0.85,
+            format: 'image/jpeg',
+            fallbacks: [{ maxWidth: 1600, quality: 0.8 }]
+          });
+
+          imagenesProcesadas.push(optimizada);
+        } catch {
+          imagenesProcesadas.push(file);
+        }
+      }
+    }
+
+    setActaImgs(imagenesProcesadas);
+    setEscaneandoActa(false);
+
+    if (escaneadas > 0) {
+      setMensajeActa(
+        imagenesProcesadas.length > 1
+          ? `${imagenesProcesadas.length} imágenes del acta escaneadas y listas para subir`
+          : 'Acta escaneada y lista para subir'
+      );
+    } else {
+      setMensajeActa(
+        imagenesProcesadas.length > 1
+          ? `${imagenesProcesadas.length} imágenes del acta listas para subir`
+          : 'Imagen del acta lista para subir'
+      );
+    }
+  };
+
   const handleSubirActa = async (e) => {
     e.preventDefault();
 
@@ -900,24 +978,13 @@ const DashboardPage = () => {
       formData.append('acta', acta);
     }
 
-    let imgsParaSubir = actaImgs;
-
-    if (actaImgs.length > 0) {
-      try {
-        setMensajeActa('Optimizando imágenes del acta...');
-
-        imgsParaSubir = await optimizeMany(actaImgs, {
-          maxWidth: 1600,
-          quality: 0.75,
-          format: 'image/jpeg',
-          fallbacks: [{ maxWidth: 1280, quality: 0.7 }]
-        });
-      } catch (err) {
-        console.error('Falló optimizando imágenes del acta:', err);
-      }
-    }
+    const imgsParaSubir = actaImgs;
 
     imgsParaSubir.forEach((img) => formData.append('imagenes', img));
+
+    if (imgsParaSubir.length > 0) {
+      formData.append('procesada', 'true');
+    }
 
     setCargandoActa(true);
 
@@ -1107,6 +1174,7 @@ const DashboardPage = () => {
     setCntPrevias(0);
     setCntPosteriores(0);
     setActaOK(false);
+    setEscaneandoActa(false);
     setGenLoading(false);
     setGenUrl('');
     setGenErr('');
@@ -1188,6 +1256,7 @@ const DashboardPage = () => {
     setActa(null);
     setActaImgs([]);
     setActaOK(false);
+    setEscaneandoActa(false);
     setCntPrevias(0);
     setCntPosteriores(0);
     setGenLoading(false);
@@ -1571,7 +1640,7 @@ const DashboardPage = () => {
                 accept="image/*"
                 multiple
                 className="hidden-input"
-                onChange={(e) => setActaImgs(Array.from(e.target.files || []))}
+                onChange={handleSeleccionarImagenesActa}
               />
 
               <div className="dual-upload">
@@ -1595,7 +1664,7 @@ const DashboardPage = () => {
                   )}
                 </div>
 
-                <div className="file-card small" onClick={pickImgs} role="button" tabIndex={0}>
+                <div className={`file-card small ${escaneandoActa ? 'scanning' : ''}`} onClick={escaneandoActa ? undefined : pickImgs} role="button" tabIndex={0}>
                   {imgPreviewUrl ? (
                     <img src={imgPreviewUrl} alt="Vista previa acta" />
                   ) : (
@@ -1605,7 +1674,15 @@ const DashboardPage = () => {
                     </div>
                   )}
 
-                  {actaImgs.length > 0 && (
+                  {escaneandoActa && (
+                    <div className="scan-overlay">
+                      <div className="scan-loader" />
+                      <strong>Escaneando acta</strong>
+                      <span>Detectando documento y corrigiendo perspectiva...</span>
+                    </div>
+                  )}
+
+                  {actaImgs.length > 0 && !escaneandoActa && (
                     <button type="button" className="file-clear" onClick={clearImgs}>
                       Quitar
                     </button>
@@ -1627,8 +1704,8 @@ const DashboardPage = () => {
                 </button>
 
                 <div className="right-actions">
-                  <button type="submit" className="btn primary" disabled={cargandoActa}>
-                    {cargandoActa ? 'Subiendo...' : 'Subir acta'}
+                  <button type="submit" className="btn primary" disabled={cargandoActa || escaneandoActa}>
+                    {escaneandoActa ? 'Escaneando...' : cargandoActa ? 'Subiendo...' : 'Subir acta'}
                   </button>
 
                   <button type="button" className="btn primary" disabled={!canNextFrom4} onClick={goNext}>
@@ -2262,6 +2339,12 @@ const DashboardPage = () => {
           min-height: 230px;
         }
 
+        .file-card.scanning {
+          border-color: rgba(255, 242, 0, 0.48);
+          background: rgba(255, 242, 0, 0.08);
+          cursor: wait;
+        }
+
         .file-card img {
           width: 100%;
           height: 100%;
@@ -2318,6 +2401,42 @@ const DashboardPage = () => {
           padding: 8px 12px;
           font-size: 12px;
           font-weight: 900;
+        }
+
+        .scan-overlay {
+          position: absolute;
+          inset: 0;
+          z-index: 4;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-direction: column;
+          gap: 10px;
+          padding: 20px;
+          text-align: center;
+          background: rgba(12, 14, 18, 0.78);
+          border: 1px solid rgba(255, 242, 0, 0.22);
+          backdrop-filter: blur(10px);
+        }
+
+        .scan-loader {
+          width: 42px;
+          height: 42px;
+          border-radius: 50%;
+          border: 4px solid rgba(255, 255, 255, 0.18);
+          border-top-color: #fff200;
+          animation: scanSpin 820ms linear infinite;
+        }
+
+        .scan-overlay strong {
+          color: #fff;
+          font-size: 16px;
+        }
+
+        .scan-overlay span {
+          color: #c5c8ce;
+          font-size: 13px;
+          line-height: 1.35;
         }
 
         .dual-upload {
@@ -2744,6 +2863,16 @@ const DashboardPage = () => {
           to {
             opacity: 1;
             transform: translateY(0);
+          }
+        }
+
+        @keyframes scanSpin {
+          from {
+            transform: rotate(0deg);
+          }
+
+          to {
+            transform: rotate(360deg);
           }
         }
 
