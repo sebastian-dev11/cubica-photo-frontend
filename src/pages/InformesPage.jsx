@@ -549,7 +549,7 @@ const InformesPage = () => {
                     {inf.fuentesPersistentes ? (
                       <span className="badge success">Editable</span>
                     ) : (
-                      <span className="badge warning">Sin reconstrucción</span>
+                      <span className="badge warning">No Editable</span>
                     )}
                   </div>
                 </div>
