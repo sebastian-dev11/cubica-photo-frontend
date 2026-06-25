@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { http } from '../services/http';
+import informesService from '../services/informesService';
 
 const ConfirmModal = ({
   open,
@@ -42,6 +43,8 @@ const ConfirmModal = ({
   );
 };
 
+const ADVERTENCIA_PERSISTENCIA = 'Este archivo no cuenta con los datos necesarios para ser reconstruido. Solo los informes generados a partir del 25/06/2026 podrán ser editados.';
+
 const InformesPage = () => {
   const navigate = useNavigate();
 
@@ -68,8 +71,20 @@ const InformesPage = () => {
     title: '',
     numeroIncidencia: '',
     regional: '',
-    includesActa: false
+    includesActa: false,
+    motivo: '',
+    fotosPrevias: [],
+    fotosPosteriores: [],
+    acta: [],
+    actaImagenes: [],
+    fuentesPersistentes: true
   });
+
+  const [versionsOpen, setVersionsOpen] = useState(false);
+  const [versionsLoading, setVersionsLoading] = useState(false);
+  const [versionsInforme, setVersionsInforme] = useState(null);
+  const [versiones, setVersiones] = useState([]);
+  const [versionsMensaje, setVersionsMensaje] = useState('');
 
   const token = localStorage.getItem('token') || '';
   const nombreTecnico = localStorage.getItem('nombreTecnico') || 'Técnico';
@@ -104,7 +119,7 @@ const InformesPage = () => {
     setMensaje('');
 
     try {
-      const data = await http.get('/informes', {
+      const data = await informesService.listarInformes({
         page,
         limit,
         search,
@@ -184,36 +199,142 @@ const InformesPage = () => {
     return s;
   };
 
+  const puedeReconstruirInforme = (inf) => Boolean(inf?.fuentesPersistentes);
+
+  const handleEditFiles = (field, fileList, multiple = true) => {
+    const archivos = Array.from(fileList || []);
+
+    setEditData((prev) => ({
+      ...prev,
+      [field]: multiple ? archivos : archivos.slice(0, 1)
+    }));
+  };
+
+  const resumenArchivos = (archivos, emptyText) => {
+    const lista = Array.isArray(archivos) ? archivos : [];
+
+    if (lista.length === 0) return emptyText;
+
+    if (lista.length === 1) return lista[0]?.name || '1 archivo seleccionado';
+
+    return `${lista.length} archivos seleccionados`;
+  };
+
+
+  const getVersionUrl = (version) => (
+    version?.pdf?.url ||
+    version?.url ||
+    version?.shareUrl ||
+    ''
+  );
+
+  const getEditorVersion = (version) => (
+    version?.editadoPor?.nombre ||
+    version?.editadoPor?.usuario ||
+    version?.generatedBy?.nombre ||
+    version?.generatedBy?.usuario ||
+    '-'
+  );
+
+  const getCambiosVersion = (version) => {
+    const cambios = Array.isArray(version?.cambios) ? version.cambios : [];
+
+    return cambios.filter((cambio) => cambio?.campo).slice(0, 4);
+  };
+
+  const cerrarVersiones = () => {
+    if (versionsLoading) return;
+
+    setVersionsOpen(false);
+    setVersionsInforme(null);
+    setVersiones([]);
+    setVersionsMensaje('');
+  };
+
+  const handleVersiones = async (inf) => {
+    if (!inf?._id) return;
+
+    setVersionsInforme(inf);
+    setVersiones([]);
+    setVersionsMensaje('');
+    setVersionsOpen(true);
+    setVersionsLoading(true);
+
+    try {
+      const data = await informesService.listarVersionesInforme(inf._id, {
+        page: 1,
+        limit: 50
+      });
+
+      const lista = Array.isArray(data?.data)
+        ? data.data
+        : Array.isArray(data?.versiones)
+          ? data.versiones
+          : [];
+
+      setVersiones(lista);
+
+      if (lista.length === 0) {
+        setVersionsMensaje('Este informe no tiene versiones anteriores guardadas.');
+      }
+    } catch (err) {
+      console.error('Error cargando versiones del informe:', err);
+      setVersionsMensaje(err?.response?.data?.error || err?.response?.data?.mensaje || 'No se pudieron cargar las versiones del informe');
+    } finally {
+      setVersionsLoading(false);
+    }
+  };
+
   const askDelete = (inf) => {
     setToDelete(inf);
     setConfirmOpen(true);
   };
 
   const handleEdit = (inf) => {
+    setMensaje('');
+
     setEditData({
       id: inf._id,
       title: inf.title || '',
       numeroIncidencia: inf.numeroIncidencia || '',
       regional: inf.regional || '',
-      includesActa: Boolean(inf.includesActa)
+      includesActa: Boolean(inf.includesActa),
+      motivo: '',
+      fotosPrevias: [],
+      fotosPosteriores: [],
+      acta: [],
+      actaImagenes: [],
+      fuentesPersistentes: puedeReconstruirInforme(inf)
     });
 
     setEditOpen(true);
   };
 
   const saveEdit = async () => {
-    if (!editData.id) return;
+    if (!editData.id || !editData.fuentesPersistentes) return;
 
     setEditing(true);
     setMensaje('');
 
     try {
-      await http.put(`/informes/${editData.id}`, {
+      const payload = {
         title: editData.title,
         numeroIncidencia: editData.numeroIncidencia,
         regional: editData.regional,
-        includesActa: editData.includesActa
-      });
+        includesActa: editData.includesActa,
+        motivo: editData.motivo,
+        fotosPrevias: editData.fotosPrevias,
+        fotosPosteriores: editData.fotosPosteriores,
+        acta: editData.acta,
+        actaImagenes: editData.actaImagenes
+      };
+
+      delete payload.geolocalizacion;
+      delete payload.actualizarGeolocalizacion;
+      delete payload.actualizarGPS;
+      delete payload.actualizarGps;
+
+      await informesService.editarInformeAvanzado(editData.id, payload);
 
       setEditOpen(false);
       setMensaje('Informe actualizado correctamente');
@@ -233,7 +354,7 @@ const InformesPage = () => {
     setMensaje('');
 
     try {
-      await http.delete(`/informes/${toDelete._id}`);
+      await informesService.eliminarInforme(toDelete._id);
 
       setConfirmOpen(false);
       setToDelete(null);
@@ -423,7 +544,14 @@ const InformesPage = () => {
                     <p>{formatFecha(inf.createdAt)}</p>
                   </div>
 
-                  {inf.includesActa && <span className="badge">Incluye acta</span>}
+                  <div className="badges">
+                    {inf.includesActa && <span className="badge">Incluye acta</span>}
+                    {inf.fuentesPersistentes ? (
+                      <span className="badge success">Editable</span>
+                    ) : (
+                      <span className="badge warning">Sin reconstrucción</span>
+                    )}
+                  </div>
                 </div>
 
                 <div className="meta-grid">
@@ -452,9 +580,23 @@ const InformesPage = () => {
                     Ver PDF
                   </button>
 
+                  <button
+                    type="button"
+                    className="btn ghost"
+                    onClick={() => handleVersiones(inf)}
+                    disabled={versionsLoading && versionsInforme?._id === inf._id}
+                  >
+                    Versiones
+                  </button>
+
                   {isAdmin && (
                     <>
-                      <button type="button" className="btn primary" onClick={() => handleEdit(inf)}>
+                      <button
+                        type="button"
+                        className="btn primary"
+                        onClick={() => handleEdit(inf)}
+                        title="Editar informe"
+                      >
                         Editar
                       </button>
 
@@ -514,15 +656,26 @@ const InformesPage = () => {
       />
 
       {editOpen && createPortal(
-        <div className="modal-overlay" role="presentation">
-          <div className="modal-panel" role="dialog" aria-modal="true">
+        <div className="modal-overlay" role="presentation" onClick={() => { if (!editing) setEditOpen(false); }}>
+          <div className="modal-panel edit-modal-panel" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
             <h3 className="modal-title">Editar informe</h3>
-            <p className="modal-msg">Actualiza la información visible del informe.</p>
+            <p className="modal-msg">
+              {editData.fuentesPersistentes
+                ? 'Actualiza la información visible del informe. También puedes reemplazar las fotos o el acta.'
+                : 'Este informe se puede consultar, pero no se puede reconstruir desde sus fuentes originales.'}
+            </p>
+
+            {!editData.fuentesPersistentes && (
+              <div className="edit-warning" role="alert">
+                {ADVERTENCIA_PERSISTENCIA}
+              </div>
+            )}
 
             <div className="field">
               <label>Título</label>
               <input
                 value={editData.title}
+                disabled={!editData.fuentesPersistentes || editing}
                 onChange={(e) =>
                   setEditData((prev) => ({
                     ...prev,
@@ -536,6 +689,7 @@ const InformesPage = () => {
               <label>Número de incidencia</label>
               <input
                 value={editData.numeroIncidencia}
+                disabled={!editData.fuentesPersistentes || editing}
                 onChange={(e) =>
                   setEditData((prev) => ({
                     ...prev,
@@ -549,6 +703,7 @@ const InformesPage = () => {
               <label>Regional</label>
               <select
                 value={editData.regional}
+                disabled={!editData.fuentesPersistentes || editing}
                 onChange={(e) =>
                   setEditData((prev) => ({
                     ...prev,
@@ -567,6 +722,7 @@ const InformesPage = () => {
               <input
                 type="checkbox"
                 checked={editData.includesActa}
+                disabled={!editData.fuentesPersistentes || editing}
                 onChange={(e) =>
                   setEditData((prev) => ({
                     ...prev,
@@ -577,6 +733,74 @@ const InformesPage = () => {
               Incluye acta
             </label>
 
+            <div className="field">
+              <label>Motivo de edición</label>
+              <textarea
+                value={editData.motivo}
+                disabled={!editData.fuentesPersistentes || editing}
+                onChange={(e) =>
+                  setEditData((prev) => ({
+                    ...prev,
+                    motivo: e.target.value
+                  }))
+                }
+                placeholder="Ej: corrección de incidencia o reemplazo de evidencia"
+              />
+            </div>
+
+            <div className="edit-note">
+              Si no seleccionas archivos nuevos, se conservarán las evidencias actuales.
+            </div>
+
+            <div className="edit-files-grid">
+              <div className="file-box">
+                <label>Reemplazar fotos del antes</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  disabled={!editData.fuentesPersistentes || editing}
+                  onChange={(e) => handleEditFiles('fotosPrevias', e.target.files)}
+                />
+                <small>{resumenArchivos(editData.fotosPrevias, 'No seleccionaste fotos nuevas')}</small>
+              </div>
+
+              <div className="file-box">
+                <label>Reemplazar fotos del después</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  disabled={!editData.fuentesPersistentes || editing}
+                  onChange={(e) => handleEditFiles('fotosPosteriores', e.target.files)}
+                />
+                <small>{resumenArchivos(editData.fotosPosteriores, 'No seleccionaste fotos nuevas')}</small>
+              </div>
+
+              <div className="file-box">
+                <label>Reemplazar acta PDF o imagen</label>
+                <input
+                  type="file"
+                  accept="application/pdf,image/*"
+                  disabled={!editData.fuentesPersistentes || editing}
+                  onChange={(e) => handleEditFiles('acta', e.target.files, false)}
+                />
+                <small>{resumenArchivos(editData.acta, 'No seleccionaste acta nueva')}</small>
+              </div>
+
+              <div className="file-box">
+                <label>Reemplazar imágenes del acta</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  disabled={!editData.fuentesPersistentes || editing}
+                  onChange={(e) => handleEditFiles('actaImagenes', e.target.files)}
+                />
+                <small>{resumenArchivos(editData.actaImagenes, 'No seleccionaste imágenes nuevas')}</small>
+              </div>
+            </div>
+
             <div className="modal-actions">
               <button
                 type="button"
@@ -584,18 +808,133 @@ const InformesPage = () => {
                 onClick={() => setEditOpen(false)}
                 disabled={editing}
               >
-                Cancelar
+                {editData.fuentesPersistentes ? 'Cancelar' : 'Cerrar'}
               </button>
 
               <button
                 type="button"
                 className="btn primary"
                 onClick={saveEdit}
-                disabled={editing}
+                disabled={editing || !editData.fuentesPersistentes}
               >
-                {editing ? 'Guardando...' : 'Guardar'}
+                {!editData.fuentesPersistentes ? 'No editable' : editing ? 'Guardando...' : 'Guardar'}
               </button>
             </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+
+
+      {versionsOpen && createPortal(
+        <div className="modal-overlay" role="presentation" onClick={cerrarVersiones}>
+          <div className="modal-panel versions-modal-panel" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+            <div className="versions-head">
+              <div>
+                <h3 className="modal-title">Versiones del informe</h3>
+                <p className="modal-msg">
+                  {versionsInforme ? getTituloInforme(versionsInforme) : 'Informe técnico'}
+                </p>
+              </div>
+
+              <button type="button" className="btn ghost" onClick={cerrarVersiones} disabled={versionsLoading}>
+                Cerrar
+              </button>
+            </div>
+
+            {versionsInforme && (
+              <div className="version-current-card">
+                <div>
+                  <span>Versión actual</span>
+                  <strong>{versionsInforme.versionActual || 1}</strong>
+                  <p>{formatFecha(versionsInforme.editadoEn || versionsInforme.createdAt)}</p>
+                </div>
+
+                <button
+                  type="button"
+                  className="btn primary"
+                  onClick={() => handleVer(versionsInforme.shareUrl || versionsInforme.url)}
+                  disabled={!versionsInforme.shareUrl && !versionsInforme.url}
+                >
+                  Ver PDF actual
+                </button>
+              </div>
+            )}
+
+            {versionsLoading && (
+              <div className="versions-loading">
+                Cargando versiones...
+              </div>
+            )}
+
+            {!versionsLoading && versionsMensaje && (
+              <div className="edit-note">
+                {versionsMensaje}
+              </div>
+            )}
+
+            {!versionsLoading && versiones.length > 0 && (
+              <div className="versions-list">
+                {versiones.map((version) => {
+                  const versionUrl = getVersionUrl(version);
+                  const cambios = getCambiosVersion(version);
+
+                  return (
+                    <article className="version-card" key={version._id || version.version}>
+                      <div className="version-card-header">
+                        <div>
+                          <span>Versión anterior</span>
+                          <strong>Versión {version.version || '-'}</strong>
+                        </div>
+
+                        <button
+                          type="button"
+                          className="btn ghost"
+                          onClick={() => handleVer(versionUrl)}
+                          disabled={!versionUrl}
+                        >
+                          Ver PDF
+                        </button>
+                      </div>
+
+                      <div className="version-meta-grid">
+                        <div>
+                          <span>Fecha</span>
+                          <strong>{formatFecha(version.createdAt)}</strong>
+                        </div>
+
+                        <div>
+                          <span>Editado por</span>
+                          <strong>{getEditorVersion(version)}</strong>
+                        </div>
+
+                        <div>
+                          <span>Incidencia</span>
+                          <strong>{formatIncidencia(version.numeroIncidencia)}</strong>
+                        </div>
+                      </div>
+
+                      {version.motivo && (
+                        <p className="version-motivo">
+                          {version.motivo}
+                        </p>
+                      )}
+
+                      {cambios.length > 0 && (
+                        <div className="version-changes">
+                          {cambios.map((cambio, index) => (
+                            <span key={`${version._id || version.version}-${cambio.campo}-${index}`}>
+                              {cambio.campo}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>,
         document.body
@@ -813,7 +1152,8 @@ const InformesPage = () => {
         }
 
         input,
-        select {
+        select,
+        textarea {
           width: 100%;
           min-height: 52px;
           border: 1px solid rgba(255, 255, 255, 0.16);
@@ -845,8 +1185,17 @@ const InformesPage = () => {
           color: #f4f4f5;
         }
 
+        textarea {
+          min-height: 94px;
+          padding: 14px 16px;
+          resize: vertical;
+          font-family: inherit;
+          line-height: 1.35;
+        }
+
         input:focus,
-        select:focus {
+        select:focus,
+        textarea:focus {
           border-color: rgba(255, 242, 0, 0.45);
           box-shadow: 0 0 0 4px rgba(255, 242, 0, 0.12);
           background: rgba(255, 255, 255, 0.1);
@@ -963,6 +1312,27 @@ const InformesPage = () => {
           font-size: 12px;
           font-weight: 900;
         }
+
+        .badges {
+          display: flex;
+          align-items: flex-start;
+          justify-content: flex-end;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+
+        .badge.success {
+          background: rgba(74, 222, 128, 0.12);
+          border-color: rgba(74, 222, 128, 0.26);
+          color: #b8f7ca;
+        }
+
+        .badge.warning {
+          background: rgba(255, 180, 72, 0.12);
+          border-color: rgba(255, 180, 72, 0.28);
+          color: #ffd89a;
+        }
+
 
         .meta-grid {
           display: grid;
@@ -1120,12 +1490,151 @@ const InformesPage = () => {
           width: min(520px, 100%);
           max-height: calc(100vh - 36px);
           overflow: auto;
+          overscroll-behavior: contain;
           border-radius: 26px;
           background: rgba(21, 24, 28, 0.96);
           border: 1px solid rgba(255, 255, 255, 0.14);
           box-shadow: 0 24px 90px rgba(0, 0, 0, 0.46);
           padding: 22px;
           animation: pop 150ms ease-out;
+        }
+
+        .edit-modal-panel {
+          width: min(720px, 100%);
+          padding-bottom: 18px;
+        }
+
+        .versions-modal-panel {
+          width: min(860px, 100%);
+          padding-bottom: 22px;
+        }
+
+        .versions-head {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 14px;
+          margin-bottom: 14px;
+        }
+
+        .versions-head .modal-msg {
+          margin-bottom: 0;
+        }
+
+        .version-current-card {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 14px;
+          margin-bottom: 14px;
+          padding: 14px;
+          border-radius: 18px;
+          background: rgba(255, 242, 0, 0.1);
+          border: 1px solid rgba(255, 242, 0, 0.22);
+        }
+
+        .version-current-card span,
+        .version-card-header span,
+        .version-meta-grid span {
+          display: block;
+          color: #b8bcc3;
+          font-size: 12px;
+          font-weight: 900;
+          margin-bottom: 5px;
+        }
+
+        .version-current-card strong,
+        .version-card-header strong,
+        .version-meta-grid strong {
+          display: block;
+          color: #fff;
+          font-size: 15px;
+          font-weight: 900;
+          overflow-wrap: anywhere;
+        }
+
+        .version-current-card p {
+          margin: 5px 0 0;
+          color: #c5c8ce;
+          font-size: 13px;
+          font-weight: 800;
+        }
+
+        .versions-loading {
+          padding: 18px;
+          border-radius: 18px;
+          background: rgba(255, 255, 255, 0.06);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          color: #f4f4f5;
+          font-weight: 900;
+          text-align: center;
+        }
+
+        .versions-list {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+
+        .version-card {
+          padding: 14px;
+          border-radius: 18px;
+          background: rgba(255, 255, 255, 0.055);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .version-card-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          margin-bottom: 12px;
+        }
+
+        .version-meta-grid {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 10px;
+        }
+
+        .version-meta-grid div {
+          min-width: 0;
+          padding: 12px;
+          border-radius: 16px;
+          background: rgba(255, 255, 255, 0.055);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .version-motivo {
+          margin: 12px 0 0;
+          padding: 12px;
+          border-radius: 16px;
+          background: rgba(255, 255, 255, 0.055);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          color: #d7d9dd;
+          font-size: 13px;
+          font-weight: 800;
+          line-height: 1.4;
+        }
+
+        .version-changes {
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+          margin-top: 12px;
+        }
+
+        .version-changes span {
+          display: inline-flex;
+          align-items: center;
+          min-height: 30px;
+          padding: 6px 10px;
+          border-radius: 999px;
+          background: rgba(255, 255, 255, 0.08);
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          color: #f4f4f5;
+          font-size: 12px;
+          font-weight: 900;
         }
 
         .modal-title {
@@ -1150,6 +1659,20 @@ const InformesPage = () => {
           margin-top: 18px;
         }
 
+        .edit-modal-panel .modal-actions {
+          position: sticky;
+          bottom: -18px;
+          z-index: 2;
+          margin-left: -22px;
+          margin-right: -22px;
+          margin-bottom: -18px;
+          padding: 14px 22px 18px;
+          background: linear-gradient(180deg, rgba(21, 24, 28, 0.78), rgba(21, 24, 28, 0.98) 34%);
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
+          border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
         .check-label {
           display: flex;
           align-items: center;
@@ -1164,6 +1687,75 @@ const InformesPage = () => {
           height: 18px;
           min-height: 18px;
           padding: 0;
+        }
+
+        .edit-warning {
+          margin: 0 0 14px;
+          padding: 14px;
+          border-radius: 18px;
+          background: rgba(255, 193, 7, 0.14);
+          border: 1px solid rgba(255, 193, 7, 0.38);
+          color: #ffe8a3;
+          font-size: 14px;
+          font-weight: 900;
+          line-height: 1.45;
+        }
+
+        .edit-note {
+          margin: 8px 0 14px;
+          padding: 12px 14px;
+          border-radius: 16px;
+          background: rgba(255, 242, 0, 0.1);
+          border: 1px solid rgba(255, 242, 0, 0.22);
+          color: #fff7a1;
+          font-size: 13px;
+          font-weight: 800;
+          line-height: 1.4;
+        }
+
+        .edit-files-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 12px;
+        }
+
+        .file-box {
+          min-width: 0;
+          padding: 12px;
+          border-radius: 18px;
+          background: rgba(255, 255, 255, 0.055);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .file-box label {
+          display: block;
+          color: #d7d9dd;
+          font-size: 13px;
+          font-weight: 900;
+          margin-bottom: 8px;
+        }
+
+        .file-box input {
+          min-height: 48px;
+          padding: 11px;
+          font-size: 13px;
+        }
+
+        .file-box small {
+          display: block;
+          margin-top: 8px;
+          color: #b8bcc3;
+          font-size: 12px;
+          font-weight: 800;
+          line-height: 1.35;
+          overflow-wrap: anywhere;
+        }
+
+        input:disabled,
+        select:disabled,
+        textarea:disabled {
+          opacity: 0.62;
+          cursor: not-allowed;
         }
 
         @keyframes enter {
@@ -1312,6 +1904,24 @@ const InformesPage = () => {
           .modal-actions .btn {
             width: 100%;
           }
+
+          .edit-files-grid,
+          .version-meta-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .versions-head,
+          .version-current-card,
+          .version-card-header {
+            align-items: stretch;
+            flex-direction: column;
+          }
+
+          .versions-head .btn,
+          .version-current-card .btn,
+          .version-card-header .btn {
+            width: 100%;
+          }
         }
 
         @media (max-width: 420px) {
@@ -1348,7 +1958,8 @@ const InformesPage = () => {
         @media (hover: none) and (pointer: coarse) {
           .btn,
           input,
-          select {
+          select,
+          textarea {
             min-height: 54px;
           }
 
@@ -1440,7 +2051,8 @@ const InformesPage = () => {
           }
 
           input,
-          select {
+          select,
+          textarea {
             min-height: 54px;
             border-radius: 15px;
             font-size: 16px;
@@ -1492,8 +2104,31 @@ const InformesPage = () => {
           .modal-panel {
             width: 100%;
             max-height: calc(100dvh - 16px);
-            border-radius: 24px;
-            padding: 18px;
+            border-radius: 24px 24px 0 0;
+            padding: 16px;
+          }
+
+          .edit-modal-panel,
+          .versions-modal-panel {
+            max-height: calc(100dvh - 8px);
+          }
+
+          .edit-modal-panel .modal-actions {
+            bottom: -16px;
+            margin-left: -16px;
+            margin-right: -16px;
+            margin-bottom: -16px;
+            padding: 12px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+          }
+
+          .edit-warning,
+          .edit-note,
+          .file-box,
+          .version-card,
+          .version-current-card,
+          .version-meta-grid div,
+          .version-motivo {
+            border-radius: 16px;
           }
         }
 
