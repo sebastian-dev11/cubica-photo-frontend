@@ -1159,43 +1159,48 @@ const DashboardPage = () => {
   };
 
   const handleShareWhatsApp = () => {
-    if (!genUrl) return;
+  const urlCompartir = genPreviewUrl || genUrl;
 
-    const tiendaOptsLocal = filteredTiendas.map((t) => ({
-      value: t._id,
-      label: `${t.nombre} - ${t.regional ? t.regional + ' | ' : ''}${t.departamento}, ${t.ciudad}`
-    }));
+  if (!urlCompartir) return;
 
-    const tiendaLabel = (tiendaOptsLocal.find((o) => o.value === selectedTienda)?.label || '').trim();
-    const texto = `Informe técnico${tiendaLabel ? ` - ${tiendaLabel}` : ''}\n${genUrl}`;
-    const waUrl = `https://wa.me/?text=${encodeURIComponent(texto)}`;
+  const tiendaOptsLocal = filteredTiendas.map((t) => ({
+    value: t._id,
+    label: `${t.nombre} - ${t.regional ? t.regional + ' | ' : ''}${t.departamento}, ${t.ciudad}`
+  }));
 
-    const cleanupAll = async () => {
-      try {
-        await serverResetSession(sesionId);
-      } catch (e) {
-        console.error('Falló limpieza backend en compartir:', e);
-      }
+  const tiendaLabel = (
+    tiendaOptsLocal.find((o) => o.value === selectedTienda)?.label || ''
+  ).trim();
 
-      try {
-        await resetFlow(true);
-        limpiarSesionLocal();
-      } catch {}
-    };
+  const texto = `Informe técnico${tiendaLabel ? ` - ${tiendaLabel}` : ''}\n${urlCompartir}`;
+  const waUrl = `https://wa.me/?text=${encodeURIComponent(texto)}`;
 
-    const popup = window.open(waUrl, '_blank', 'noopener,noreferrer');
-
-    if (popup && !popup.closed) {
-      popup.opener = null;
-      setTimeout(() => {
-        cleanupAll();
-        navigate('/');
-      }, 400);
-    } else {
-      cleanupAll();
-      window.location.href = waUrl;
+  const cleanupAll = async () => {
+    try {
+      await serverResetSession(sesionId);
+    } catch (e) {
+      console.error('Falló limpieza backend en compartir:', e);
     }
+
+    try {
+      await resetFlow(true);
+      limpiarSesionLocal();
+    } catch {}
   };
+
+  const popup = window.open(waUrl, '_blank', 'noopener,noreferrer');
+
+  if (popup && !popup.closed) {
+    popup.opener = null;
+    setTimeout(() => {
+      cleanupAll();
+      navigate('/');
+    }, 400);
+  } else {
+    cleanupAll();
+    window.location.href = waUrl;
+  }
+};
 
   const cerrarVersionNotes = () => {
     localStorage.setItem(VERSION_STORAGE_KEY, APP_VERSION);
