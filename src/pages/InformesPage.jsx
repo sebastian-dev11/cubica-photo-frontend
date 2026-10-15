@@ -135,9 +135,103 @@ const InformesPage = () => {
     navigate('/');
   };
 
-  const handleVer = (url) => {
-    if (!url) return;
-    window.open(url, '_blank', 'noopener,noreferrer');
+  const handleVer = async (informe) => {
+    if (!informe?._id) return;
+
+    const ventana = window.open('about:blank', '_blank');
+
+    if (!ventana) {
+      setMensaje('Permite las ventanas emergentes para visualizar el informe.');
+      setTimeout(() => setMensaje(''), 5000);
+      return;
+    }
+
+    ventana.opener = null;
+    ventana.document.open();
+    ventana.document.write(`
+      <!doctype html>
+      <html lang="es">
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <title>Abriendo informe</title>
+          <style>
+            body {
+              margin: 0;
+              min-height: 100vh;
+              display: grid;
+              place-items: center;
+              background: #101317;
+              color: #f4f4f5;
+              font-family: Arial, sans-serif;
+            }
+            main {
+              width: min(520px, calc(100% - 40px));
+              line-height: 1.5;
+            }
+            h2 {
+              color: #fff200;
+            }
+          </style>
+        </head>
+        <body>
+          <main>
+            <h2>Abriendo informe</h2>
+            <p id="estado">Obteniendo el enlace de vista previa...</p>
+          </main>
+        </body>
+      </html>
+    `);
+    ventana.document.close();
+
+    try {
+      const respuesta = await http.get(
+        `/pdf/preview-link/${encodeURIComponent(informe._id)}`
+      );
+      const data = respuesta?.previewUrl ? respuesta : respuesta?.data;
+
+      if (!data?.previewUrl) {
+        throw new Error(
+          data?.error ||
+          'El backend no devolvió el enlace de vista previa.'
+        );
+      }
+
+      if (!ventana.closed) {
+        ventana.location.replace(data.previewUrl);
+      }
+    } catch (err) {
+      const status = err?.response?.status;
+      const detalle =
+        err?.response?.data?.error ||
+        err?.response?.data?.mensaje ||
+        err?.message ||
+        'No se pudo abrir el informe.';
+
+      let mensajeError = detalle;
+
+      if (status === 404) {
+        mensajeError =
+          'El backend no encontró la ruta o el informe solicitado. Verifica que la versión actualizada de pdf.js esté desplegada en Render.';
+      } else if (status === 401) {
+        mensajeError =
+          'La sesión no está autorizada. Cierra sesión e inicia nuevamente.';
+      } else if (status === 403) {
+        mensajeError =
+          'El usuario no tiene autorización para visualizar este informe.';
+      }
+
+      setMensaje(mensajeError);
+      setTimeout(() => setMensaje(''), 8000);
+
+      if (!ventana.closed) {
+        try {
+          const estado = ventana.document.getElementById('estado');
+          if (estado) estado.textContent = mensajeError;
+          ventana.document.title = 'No se pudo abrir el informe';
+        } catch {}
+      }
+    }
   };
 
   const getTituloInforme = (inf) => {
@@ -203,7 +297,7 @@ const InformesPage = () => {
     } finally {
       setDeleting(false);
       setTimeout(() => setMensaje(''), 3000);
-    }
+          }
   };
 
   return (
@@ -403,7 +497,7 @@ const InformesPage = () => {
                   <button
                     type="button"
                     className="btn ghost"
-                    onClick={() => handleVer(inf.shareUrl || inf.url)}
+                    onClick={() => handleVer(inf)}
                   >
                     Ver PDF
                   </button>
@@ -856,7 +950,6 @@ const InformesPage = () => {
           color: #ffd89a;
         }
 
-
         .meta-grid {
           display: grid;
           grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -995,8 +1088,7 @@ const InformesPage = () => {
         .skeleton .sk-btn.wide {
           width: 130px;
         }
-
-        .modal-overlay {
+                  .modal-overlay {
           position: fixed;
           inset: 0;
           z-index: 9999;
@@ -1280,8 +1372,7 @@ const InformesPage = () => {
           opacity: 0.62;
           cursor: not-allowed;
         }
-
-        @keyframes enter {
+                  @keyframes enter {
           from {
             opacity: 0;
             transform: translateY(8px) scale(0.99);
@@ -1616,6 +1707,192 @@ const InformesPage = () => {
           }
 
           .pager {
+            margin-top: 10px;
+          }
+
+          .modal-overlay {
+            align-items: flex-end;
+            padding: 8px;
+          }
+
+          .modal-panel {
+            width: 100%;
+            max-height: calc(100dvh - 16px);
+            border-radius: 24px 24px 0 0;
+            padding: 16px;
+          }
+
+          .edit-modal-panel,
+          .versions-modal-panel {
+            max-height: calc(100dvh - 8px);
+          }
+
+          .edit-modal-panel .modal-actions {
+            bottom: -16px;
+            margin-left: -16px;
+            margin-right: -16px;
+            margin-bottom: -16px;
+            padding: 12px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+          }
+
+          .edit-warning,
+          .edit-note,
+          .file-box,
+          .version-card,
+          .version-current-card,
+          .version-meta-grid div,
+          .version-motivo {
+            border-radius: 16px;
+          }
+        }
+                    .topbar p {
+            font-size: 13px;
+          }
+
+          .container {
+            padding-top: 2px;
+          }
+
+          .hero {
+            gap: 10px;
+            margin-bottom: 10px;
+          }
+
+          .hero > div:first-child,
+          .hero-stat {
+            padding: 18px;
+            border-radius: 22px;
+          }
+
+          .eyebrow {
+            margin-bottom: 10px;
+            padding: 7px 10px;
+            font-size: 11px;
+          }
+
+          .hero h2 {
+            font-size: clamp(28px, 10vw, 38px);
+          }
+
+          .hero p {
+            font-size: 14px;
+          }
+
+          .hero-stat strong {
+            font-size: 34px;
+          }
+
+          .card {
+            border-radius: 22px;
+            padding: 16px;
+          }
+
+          .filters-card {
+            margin-bottom: 10px;
+          }
+
+          .section-heading {
+            margin-bottom: 12px;
+          }
+
+          .section-heading h3 {
+            font-size: 24px;
+          }
+
+          .section-heading p {
+            font-size: 14px;
+          }
+
+          .field {
+            margin-bottom: 10px;
+          }
+
+          .field label {
+            font-size: 12px;
+          }
+
+          input,
+          select,
+          textarea {
+            min-height: 54px;
+            border-radius: 15px;
+            font-size: 16px;
+          }
+
+          .list {
+            gap: 10px;
+          }
+
+          .item {
+            gap: 12px;
+          }
+
+          .item-header h3 {
+            font-size: 21px;
+          }
+
+          .item-header p {
+            font-size: 13px;
+          }
+
+          .meta-grid div {
+            padding: 12px;
+            border-radius: 16px;
+          }
+
+          .row-actions,
+          .filter-actions,
+          .pager-buttons,
+          .top-actions {
+            gap: 8px;
+          }
+
+          .btn {
+            min-height: 54px;
+            border-radius: 15px;
+            padding: 0 14px;
+          }
+
+          .pager {
+            margin-top: 10px;
+          }
+
+          .modal-overlay {
+            align-items: flex-end;
+            padding: 8px;
+          }
+
+          .modal-panel {
+            width: 100%;
+            max-height: calc(100dvh - 16px);
+            border-radius: 24px 24px 0 0;
+            padding: 16px;
+          }
+
+          .edit-modal-panel,
+          .versions-modal-panel {
+            max-height: calc(100dvh - 8px);
+          }
+
+          .edit-modal-panel .modal-actions {
+            bottom: -16px;
+            margin-left: -16px;
+            margin-right: -16px;
+            margin-bottom: -16px;
+            padding: 12px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+          }
+
+          .edit-warning,
+          .edit-note,
+          .file-box,
+          .version-card,
+          .version-current-card,
+          .version-meta-grid div,
+          .version-motivo {
+            border-radius: 16px;
+          }
+        }
+                    .pager {
             margin-top: 10px;
           }
 
