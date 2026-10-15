@@ -486,7 +486,9 @@ const DashboardPage = () => {
 
   const [genLoading, setGenLoading] = useState(false);
   const [genUrl, setGenUrl] = useState('');
+  const [genPreviewUrl, setGenPreviewUrl] = useState('');
   const [genErr, setGenErr] = useState('');
+
   const [geoStatus, setGeoStatus] = useState('idle');
   const [geoMessage, setGeoMessage] = useState('');
   const [geolocalizacion, setGeolocalizacion] = useState(null);
@@ -501,8 +503,7 @@ const DashboardPage = () => {
   const [showVersionNotes, setShowVersionNotes] = useState(false);
   const [geoConfirmOpen, setGeoConfirmOpen] = useState(false);
   const geoConfirmResolveRef = useRef(null);
-
-  useEffect(() => {
+    useEffect(() => {
     if (!token || !sesionId) {
       navigate('/');
     }
@@ -1050,8 +1051,7 @@ const DashboardPage = () => {
 
     return await solicitarGeolocalizacion();
   };
-
-  const handleGenerarPDF = async () => {
+    const handleGenerarPDF = async () => {
     if (!numeroIncidencia || !String(numeroIncidencia).trim()) {
       window.alert('Ingresa la incidencia antes de generar el PDF.');
       return;
@@ -1069,6 +1069,7 @@ const DashboardPage = () => {
 
     setGenErr('');
     setGenUrl('');
+    setGenPreviewUrl('');
     setGenLoading(true);
 
     try {
@@ -1104,6 +1105,7 @@ const DashboardPage = () => {
       }
 
       setGenUrl(cloudUrl);
+      setGenPreviewUrl(data?.previewUrl || cloudUrl);
     } catch (err) {
       console.error(err);
       setGenErr(err?.response?.data?.error || err?.response?.data?.mensaje || 'Error al generar el informe. Intenta de nuevo.');
@@ -1142,6 +1144,7 @@ const DashboardPage = () => {
     setActaOK(false);
     setGenLoading(false);
     setGenUrl('');
+    setGenPreviewUrl('');
     setGenErr('');
     setGeoStatus('idle');
     setGeoMessage('');
@@ -1225,6 +1228,7 @@ const DashboardPage = () => {
     setCntPosteriores(0);
     setGenLoading(false);
     setGenUrl('');
+    setGenPreviewUrl('');
     setGenErr('');
     setGeoStatus('idle');
     setGeoMessage('');
@@ -1543,7 +1547,7 @@ const DashboardPage = () => {
                         ? `${imagenesEvidencia.length} imágenes seleccionadas`
                         : 'JPG, PNG o imagen compatible'}
                     </span>
-                  </div>
+                                     </div>
                 )}
 
                 {imagenesEvidencia.length > 1 && (
@@ -1732,7 +1736,7 @@ const DashboardPage = () => {
             {genUrl && (
               <div className="result-box">
                 <span>Informe generado</span>
-                <a href={genUrl} target="_blank" rel="noreferrer">
+                <a href={genPreviewUrl || genUrl} target="_blank" rel="noreferrer">
                   Ver PDF
                 </a>
               </div>
@@ -2042,8 +2046,8 @@ const DashboardPage = () => {
           background: rgba(255, 255, 255, 0.1);
         }
 
-        textarea {
-          resize: vertical;
+        textarea { 
+                  resize: vertical;
           min-height: 110px;
         }
 
@@ -2543,7 +2547,7 @@ const DashboardPage = () => {
           border-radius: 18px;
           background: rgba(22, 24, 29, 0.96);
           border: 1px solid rgba(255, 255, 255, 0.14);
-          box-shadow: 0 24px 90px rgba(0, 0, 0, 0.46);
+                    box-shadow: 0 24px 90px rgba(0, 0, 0, 0.46);
           backdrop-filter: blur(18px);
           padding: 8px;
         }
