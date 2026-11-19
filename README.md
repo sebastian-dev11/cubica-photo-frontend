@@ -186,15 +186,19 @@ Los scripts Vite existentes no forman parte de este despliegue.
 ### Configuración
 
 - `src/services/apiConfig.js` centraliza la URL para HTTP y autenticación.
-- Define **`REACT_APP_API_URL=https://<dominio-del-backend>` antes de compilar**.
+- Tanto en local como en producción, el backend predeterminado es
+  **`https://cubica-photo-app.onrender.com`**.
+- Si configuras la variable, usa
+  **`REACT_APP_API_URL=https://cubica-photo-app.onrender.com` antes de compilar**.
   CRA incorpora su valor al JavaScript: cambiar la variable en el hosting después
   del build no cambia la aplicación. Hay que reconstruir y publicar `build/`.
-- Sin esa variable se utiliza `/api` en el mismo origen. En producción esto
-  requiere configurar el reverse proxy del hosting; `src/setupProxy.js` solo
-  funciona con `npm start`.
-- Para desarrollo, copia `.env.example` a `.env.local`: frontend en 3001 y proxy
-  hacia el backend local en 3000, configurable con `API_PROXY_TARGET`.
-  El proxy de desarrollo ya no apunta por defecto a producción.
+- Reemplaza cualquier valor anterior `/api` o `http://localhost:...` de esa
+  variable en el hosting o en archivos `.env*` por la URL de Render.
+- Sin esa variable también se utiliza Render directamente; el build no necesita
+  un proxy `/api`. `src/setupProxy.js` solo funciona con `npm start` y su destino
+  predeterminado también es Render.
+- Para desarrollo puedes copiar `.env.example` a `.env.local`: el frontend se
+  sirve en el puerto 3001 y se conecta directamente al backend en Render.
 - El backend debe permitir el origen HTTPS del frontend y `Authorization: Bearer`.
   Las cargas siguen pasando por él. Para `FormData` el navegador establece
   `Content-Type` y el boundary; no se incluyen credenciales R2 en el frontend.

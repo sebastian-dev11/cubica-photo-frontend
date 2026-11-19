@@ -1,5 +1,8 @@
 // Create React App sustituye estas variables durante npm run build.
-export const API_URL = (process.env.REACT_APP_API_URL || '/api').replace(/\/+$/, '');
+// Local y producción utilizan el mismo backend en Render.
+export const API_URL = (
+  process.env.REACT_APP_API_URL?.trim() || 'https://cubica-photo-app.onrender.com'
+).replace(/\/+$/, '');
 
 function timeout(value, fallback) {
   const number = Number(value);
