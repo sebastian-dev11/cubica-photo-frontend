@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { http } from '../services/http';
@@ -58,8 +58,11 @@ const InformesPage = () => {
   const [search, setSearch] = useState('');
   const [incidenciaSearch, setIncidenciaSearch] = useState('');
   const [regionalSearch, setRegionalSearch] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [mensaje, setMensaje] = useState('');
+  const [informesError, setInformesError] = useState(false);
+  const informesRequestRef = useRef(null);
+  const regionalesRequestRef = useRef(null);
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [toDelete, setToDelete] = useState(null);
@@ -82,20 +85,32 @@ const InformesPage = () => {
   }, []);
 
   const fetchRegionales = useCallback(async () => {
+    regionalesRequestRef.current?.abort();
+    const controller = new AbortController();
+    regionalesRequestRef.current = controller;
+
     try {
-      const data = await http.get('/tiendas/regionales');
+      const data = await http.get('/tiendas/regionales', undefined, { signal: controller.signal });
       const lista = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
 
       setRegionales(lista);
     } catch (err) {
-      console.error('Error cargando regionales:', err);
-      setRegionales([]);
+      if (!controller.signal.aborted) {
+        console.error('Error cargando regionales:', err);
+        setRegionales([]);
+      }
+    } finally {
+      if (regionalesRequestRef.current === controller) regionalesRequestRef.current = null;
     }
   }, []);
 
   const fetchInformes = useCallback(async () => {
+    informesRequestRef.current?.abort();
+    const controller = new AbortController();
+    informesRequestRef.current = controller;
     setLoading(true);
     setMensaje('');
+    setInformesError(false);
 
     try {
       const data = await informesService.listarInformes({
@@ -104,16 +119,23 @@ const InformesPage = () => {
         search,
         incidencia: incidenciaSearch,
         regional: regionalSearch
-      });
+      }, { signal: controller.signal });
 
+      if (controller.signal.aborted) return;
       setInformes(data?.data || []);
       setTotal(data?.total || 0);
       setTotalPages(data?.totalPages || 1);
     } catch (err) {
+      if (controller.signal.aborted) return;
       console.error('Error cargando informes:', err);
-      setMensaje(err?.response?.data?.error || err?.response?.data?.mensaje || 'Error al cargar los informes');
+      const errorMessage = err?.response?.data?.error || err?.response?.data?.mensaje || 'Error al cargar los informes';
+      setMensaje(errorMessage);
+      setInformesError(true);
     } finally {
-      setLoading(false);
+      if (informesRequestRef.current === controller) {
+        informesRequestRef.current = null;
+        setLoading(false);
+      }
     }
   }, [page, limit, search, incidenciaSearch, regionalSearch]);
 
@@ -124,14 +146,27 @@ const InformesPage = () => {
   }, [navigate, token]);
 
   useEffect(() => {
-    fetchRegionales();
+    const timer = window.setTimeout(fetchRegionales, 0);
+    return () => {
+      window.clearTimeout(timer);
+      regionalesRequestRef.current?.abort();
+      regionalesRequestRef.current = null;
+    };
   }, [fetchRegionales]);
 
   useEffect(() => {
-    if (token) {
-      fetchInformes();
-    }
-  }, [token, fetchInformes]);
+    if (!token) return undefined;
+
+    setLoading(true);
+    const delay = search.trim() || incidenciaSearch.trim() ? 250 : 0;
+    const timer = window.setTimeout(fetchInformes, delay);
+
+    return () => {
+      window.clearTimeout(timer);
+      informesRequestRef.current?.abort();
+      informesRequestRef.current = null;
+    };
+  }, [token, fetchInformes, search, incidenciaSearch]);
 
   const handleCerrarSesion = () => {
     limpiarSesionLocal();
@@ -344,11 +379,11 @@ const InformesPage = () => {
             </button>
           </div>
 
-          {mensaje && <p className="message">{mensaje}</p>}
+          {mensaje && <p className="message" role="status" aria-live="polite">{mensaje}</p>}
         </section>
 
         {loading && (
-          <section className="list">
+          <section className="list" aria-busy="true">
             {[1, 2, 3].map((i) => (
               <article className="card item skeleton" key={`sk-${i}`}>
                 <div className="sk-line lg" />
@@ -366,8 +401,8 @@ const InformesPage = () => {
         )}
 
         {!loading && (
-          <section className="list">
-            {informes.length === 0 && (
+          <section className="list" aria-busy="false">
+            {informes.length === 0 && !informesError && (
               <article className="card empty">
                 <h3>No hay informes</h3>
                 <p>No se encontraron informes con los filtros seleccionados.</p>

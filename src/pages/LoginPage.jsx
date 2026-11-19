@@ -26,16 +26,15 @@ const LoginPage = () => {
 
   const navigate = useNavigate();
 
-  const withTimeout = (promise, ms) =>
-    Promise.race([
+  const withTimeout = (promise, ms) => {
+    let timer;
+    return Promise.race([
       promise,
       new Promise((_, reject) => {
-        const t = setTimeout(() => {
-          clearTimeout(t);
-          reject(new Error('timeout'));
-        }, ms);
+        timer = window.setTimeout(() => reject(new Error('timeout')), ms);
       })
-    ]);
+    ]).finally(() => window.clearTimeout(timer));
+  };
 
   const limpiarSesionLocal = () => {
     localStorage.removeItem('token');
@@ -102,8 +101,12 @@ const LoginPage = () => {
       let ex;
 
       while (performance.now() - tStart < MAX_WAIT_MS) {
+        const attemptController = new AbortController();
         try {
-          const res = await withTimeout(login(usuario.trim(), contraseña), ATTEMPT_TIMEOUT_MS);
+          const res = await withTimeout(
+            login(usuario.trim(), contraseña, { signal: attemptController.signal }),
+            ATTEMPT_TIMEOUT_MS
+          );
           const dtTotal = Math.round(performance.now() - tStart);
 
           setLatenciaMs(dtTotal);
@@ -118,6 +121,7 @@ const LoginPage = () => {
           navigate('/dashboard');
           return;
         } catch (err) {
+          attemptController.abort();
           ex = err;
 
           if (isErrorCredenciales(err)) {

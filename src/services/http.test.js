@@ -47,6 +47,19 @@ test('una desconexión es incierta y no reintenta ni siquiera GET /pdf/generar',
   expect(fetch).toHaveBeenCalledTimes(1);
 });
 
+test('permite cancelar una consulta sin confundir la cancelación con una desconexión', async () => {
+  const controller = new AbortController();
+  fetch.mockImplementation((url, { signal }) => new Promise((resolve, reject) => {
+    signal.addEventListener('abort', () => reject(new Error('aborted')));
+  }));
+
+  const request = http.get('/informes', {}, { signal: controller.signal }).catch((error) => error);
+  controller.abort();
+
+  await expect(request).resolves.toMatchObject({ name: 'AbortError', kind: 'aborted' });
+  expect(resultadoIncierto(await request)).toBe(false);
+});
+
 test('la generación tiene margen para 62 segundos y el timeout es configurable', async () => {
   jest.useFakeTimers();
   try {

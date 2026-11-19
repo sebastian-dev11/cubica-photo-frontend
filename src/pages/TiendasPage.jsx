@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { http } from '../services/http';
@@ -70,6 +70,7 @@ function TiendasPage() {
   const [tiendas, setTiendas] = useState([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -87,6 +88,8 @@ function TiendasPage() {
   const [historyTienda, setHistoryTienda] = useState(null);
   const [historyItems, setHistoryItems] = useState([]);
   const [previewError, setPreviewError] = useState('');
+  const tiendasRequestRef = useRef(null);
+  const historyRequestRef = useRef(null);
 
   const tiendasFiltradas = useMemo(() => {
     const q = limpiarTexto(search).toLowerCase();
@@ -105,6 +108,32 @@ function TiendasPage() {
     });
   }, [tiendas, search]);
 
+  const cargarTiendas = useCallback(async () => {
+    tiendasRequestRef.current?.abort();
+    const controller = new AbortController();
+    tiendasRequestRef.current = controller;
+
+    setLoading(true);
+    setError('');
+    setLoadError(false);
+
+    try {
+      const response = await http.get('/tiendas', undefined, { signal: controller.signal });
+      if (controller.signal.aborted) return;
+      setTiendas(normalizarListaTiendas(response));
+    } catch (err) {
+      if (!controller.signal.aborted) {
+        setError(obtenerMensajeError(err));
+        setLoadError(true);
+      }
+    } finally {
+      if (tiendasRequestRef.current === controller) {
+        tiendasRequestRef.current = null;
+        setLoading(false);
+      }
+    }
+  }, []);
+
   useEffect(() => {
     if (!token) {
       navigate('/');
@@ -116,22 +145,15 @@ function TiendasPage() {
       return;
     }
 
-    cargarTiendas();
-  }, [isAdmin, navigate, token]);
-
-  async function cargarTiendas() {
-    try {
-      setLoading(true);
-      setError('');
-
-      const response = await http.get('/tiendas');
-      setTiendas(normalizarListaTiendas(response));
-    } catch (err) {
-      setError(obtenerMensajeError(err));
-    } finally {
-      setLoading(false);
-    }
-  }
+    const timer = window.setTimeout(cargarTiendas, 0);
+    return () => {
+      window.clearTimeout(timer);
+      tiendasRequestRef.current?.abort();
+      tiendasRequestRef.current = null;
+      historyRequestRef.current?.abort();
+      historyRequestRef.current = null;
+    };
+  }, [cargarTiendas, isAdmin, navigate, token]);
 
   function abrirCrear() {
     setEditing(null);
@@ -241,6 +263,9 @@ function TiendasPage() {
   }
 
   async function abrirHistorial(tienda) {
+    historyRequestRef.current?.abort();
+    const controller = new AbortController();
+    historyRequestRef.current = controller;
     setPreviewError('');
     setHistoryOpen(true);
     setHistoryTienda(tienda);
@@ -252,21 +277,28 @@ function TiendasPage() {
       const response = await http.get(`/informes/tienda/${tienda._id}`, {
         page: 1,
         limit: 50
-      });
+      }, { signal: controller.signal });
 
+      if (controller.signal.aborted) return;
       setHistoryItems(normalizarListaInformes(response));
     } catch (err) {
-      setHistoryError(obtenerMensajeError(err));
+      if (!controller.signal.aborted) setHistoryError(obtenerMensajeError(err));
     } finally {
-      setHistoryLoading(false);
+      if (historyRequestRef.current === controller) {
+        historyRequestRef.current = null;
+        setHistoryLoading(false);
+      }
     }
   }
 
   function cerrarHistorial() {
+    historyRequestRef.current?.abort();
+    historyRequestRef.current = null;
     setHistoryOpen(false);
     setHistoryTienda(null);
     setHistoryItems([]);
     setHistoryError('');
+    setHistoryLoading(false);
   }
 
   async function abrirInforme(informe, compartir = false) {
@@ -336,7 +368,7 @@ function TiendasPage() {
           </div>
         )}
 
-        <section className="panel-card">
+        <section className="panel-card" aria-busy={loading}>
           <div className="section-head">
             <div>
               <h3>Listado de tiendas</h3>
@@ -354,10 +386,10 @@ function TiendasPage() {
           </div>
 
           {loading ? (
-            <div className="empty-state">Cargando tiendas...</div>
-          ) : tiendasFiltradas.length === 0 ? (
+            <div className="empty-state" role="status" aria-live="polite">Cargando tiendas...</div>
+          ) : tiendasFiltradas.length === 0 && !loadError ? (
             <div className="empty-state">No hay tiendas para mostrar.</div>
-          ) : (
+          ) : tiendasFiltradas.length > 0 ? (
             <div className="store-grid">
               {tiendasFiltradas.map((tienda) => (
                 <article className="store-card" key={tienda._id}>
@@ -375,7 +407,7 @@ function TiendasPage() {
                 </article>
               ))}
             </div>
-          )}
+          ) : null}
         </section>
       </main>
 
@@ -500,7 +532,7 @@ function TiendasPage() {
 
             {previewError && <p className="alert error" role="alert">{previewError}</p>}
             {historyLoading ? (
-              <div className="empty-state">Cargando historial...</div>
+              <div className="empty-state" role="status" aria-live="polite" aria-busy="true">Cargando historial...</div>
             ) : historyError ? (
               <div className="alert error">
                 {historyError}

@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "skills": {
+    "next-loading-skeleton": {
+      "source": "akashp1712/skills",
+      "commit": "b0882115e8cd722409c1f7821eb745cadbc454d5",
+      "sourceType": "github",
+      "skillPath": "next-loading-skeleton/SKILL.md",
+      "computedHash": "b1cb080d7dead19e34e3bf410c89fa8ee1620c04dde781b744ce2a63a51b2d01"
+    }
+  }
+}

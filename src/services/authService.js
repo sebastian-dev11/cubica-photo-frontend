@@ -1,7 +1,10 @@
 import { http } from './http';
 
-export async function login(usuario, contraseña) {
-  const data = await http.post('/auth/login', { usuario, contraseña }, { auth: false });
+export async function login(usuario, contraseña, options = {}) {
+  const data = await http.post('/auth/login', { usuario, contraseña }, {
+    auth: false,
+    ...options
+  });
   return {
     mensaje: data.mensaje || 'Acceso concedido',
     token: data.token,

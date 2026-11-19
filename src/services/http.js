@@ -67,6 +67,13 @@ function crearError(data, status, kind = tipoError(status)) {
   return error;
 }
 
+function crearErrorCancelacion() {
+  const error = new Error('La solicitud fue cancelada.');
+  error.name = 'AbortError';
+  error.kind = 'aborted';
+  return error;
+}
+
 export function mensajeError(error) {
   return error?.message || 'No se pudo completar la operación.';
 }
@@ -93,10 +100,27 @@ async function request(path, options = {}) {
   }
 
   const controller = new AbortController();
+  const callerSignal = options.signal;
+  let timeoutReached = false;
+  let timer = null;
+  const abortFromCaller = () => controller.abort();
+  if (callerSignal?.aborted) {
+    abortFromCaller();
+  } else {
+    callerSignal?.addEventListener('abort', abortFromCaller, { once: true });
+  }
+
   const timeoutMs = options.timeoutMs ?? API_TIMEOUTS.request;
-  const timer = timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : null;
 
   try {
+    if (callerSignal?.aborted) throw crearErrorCancelacion();
+    if (timeoutMs > 0) {
+      timer = setTimeout(() => {
+        timeoutReached = true;
+        controller.abort();
+      }, timeoutMs);
+    }
+
     // No reintentar: incluso GET /pdf/generar produce efectos en el servidor.
     const response = await fetch(buildUrl(path, options.params), {
       method: options.method || 'GET',
@@ -111,9 +135,11 @@ async function request(path, options = {}) {
   } catch (error) {
     // No redirigir al recibir 401: se perderían la selección y los éxitos parciales.
     if (error.response) throw error;
-    throw crearError(null, 0, controller.signal.aborted ? 'timeout' : 'connection');
+    if (callerSignal?.aborted && !timeoutReached) throw crearErrorCancelacion();
+    throw crearError(null, 0, timeoutReached ? 'timeout' : 'connection');
   } finally {
     if (timer !== null) clearTimeout(timer);
+    callerSignal?.removeEventListener('abort', abortFromCaller);
   }
 }
 

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { http } from '../services/http';
 import Icon from '../components/ui/Icon';
@@ -18,7 +18,9 @@ const UsuariosPage = () => {
   const [usuarios, setUsuarios] = useState([]);
   const [search, setSearch] = useState('');
   const [mensaje, setMensaje] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const usuariosRequestRef = useRef(null);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -60,19 +62,29 @@ const UsuariosPage = () => {
   }, []);
 
   const cargarUsuarios = useCallback(async () => {
+    usuariosRequestRef.current?.abort();
+    const controller = new AbortController();
+    usuariosRequestRef.current = controller;
     setLoading(true);
     setMensaje('');
+    setLoadError(false);
 
     try {
-      const data = await http.get('/usuarios');
+      const data = await http.get('/usuarios', undefined, { signal: controller.signal });
       const lista = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
 
+      if (controller.signal.aborted) return;
       setUsuarios(lista);
     } catch (err) {
+      if (controller.signal.aborted) return;
       console.error('Error cargando usuarios:', err);
       setMensaje(err?.response?.data?.error || err?.response?.data?.mensaje || 'Error al cargar usuarios');
+      setLoadError(true);
     } finally {
-      setLoading(false);
+      if (usuariosRequestRef.current === controller) {
+        usuariosRequestRef.current = null;
+        setLoading(false);
+      }
     }
   }, []);
 
@@ -88,9 +100,14 @@ const UsuariosPage = () => {
   }, [token, isAdmin, navigate]);
 
   useEffect(() => {
-    if (token && isAdmin) {
-      cargarUsuarios();
-    }
+    if (!token || !isAdmin) return undefined;
+
+    const timer = window.setTimeout(cargarUsuarios, 0);
+    return () => {
+      window.clearTimeout(timer);
+      usuariosRequestRef.current?.abort();
+      usuariosRequestRef.current = null;
+    };
   }, [token, isAdmin, cargarUsuarios]);
 
   const usuariosFiltrados = useMemo(() => {
@@ -302,17 +319,17 @@ const UsuariosPage = () => {
             </button>
           </div>
 
-          {mensaje && <p className="message">{mensaje}</p>}
+          {mensaje && <p className="message" role="status" aria-live="polite">{mensaje}</p>}
         </section>
 
-        <section className="list">
+        <section className="list" aria-busy={loading}>
           {loading && (
-            <div className="card empty">
+            <div className="card empty" role="status" aria-live="polite">
               <p>Cargando usuarios...</p>
             </div>
           )}
 
-          {!loading && usuariosFiltrados.length === 0 && (
+          {!loading && !loadError && usuariosFiltrados.length === 0 && (
             <div className="card empty">
               <p>No hay usuarios para mostrar.</p>
             </div>

@@ -495,18 +495,29 @@ const DashboardPage = () => {
   }, [numeroIncidencia]);
 
   useEffect(() => {
+    const controller = new AbortController();
     const fetchTiendas = async () => {
       try {
-        const data = await http.get('/tiendas');
+        const data = await http.get('/tiendas', undefined, { signal: controller.signal });
+        if (controller.signal.aborted) return;
         const lista = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
         setTiendas(lista);
       } catch (error) {
-        console.error('Error al obtener tiendas del backend:', error);
-        setTiendas([]);
+        if (!controller.signal.aborted) {
+          console.error('Error al obtener tiendas del backend:', error);
+          setTiendas([]);
+        }
       }
     };
 
-    fetchTiendas();
+    let active = true;
+    Promise.resolve().then(() => {
+      if (active) fetchTiendas();
+    });
+    return () => {
+      active = false;
+      controller.abort();
+    };
   }, []);
 
   const filteredTiendas = useMemo(() => {

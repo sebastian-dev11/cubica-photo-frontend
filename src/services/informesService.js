@@ -98,8 +98,8 @@ function construirFormDataEdicionAvanzada(data = {}) {
   return formData;
 }
 
-export function listarInformes(params = {}) {
-  return http.get('/informes', params);
+export function listarInformes(params = {}, options = {}) {
+  return http.get('/informes', params, options);
 }
 
 export function obtenerInforme(id) {
