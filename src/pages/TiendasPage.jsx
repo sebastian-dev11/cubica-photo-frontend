@@ -1,0 +1,1205 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { useNavigate } from 'react-router-dom';
+import { http } from '../services/http';
+import { abrirVistaPreviaInforme, compartirInformeWhatsApp } from '../services/pdfPreviewService';
+import Icon from '../components/ui/Icon';
+import AppMenu from '../components/ui/AppMenu';
+
+function limpiarTexto(valor) {
+  return typeof valor === 'string' ? valor.replace(/\s+/g, ' ').trim() : '';
+}
+
+function obtenerMensajeError(error) {
+  return (
+    error?.response?.data?.message ||
+    error?.response?.data?.error ||
+    error?.message ||
+    'Ocurrió un error inesperado'
+  );
+}
+
+function formatearFecha(fecha) {
+  if (!fecha) return 'Sin fecha';
+
+  try {
+    return new Date(fecha).toLocaleString('es-CO', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+      timeZone: 'America/Bogota'
+    });
+  } catch {
+    return 'Sin fecha';
+  }
+}
+
+function normalizarListaTiendas(response) {
+  if (Array.isArray(response)) return response;
+  if (Array.isArray(response?.data)) return response.data;
+  return [];
+}
+
+function normalizarListaInformes(response) {
+  if (Array.isArray(response)) return response;
+  if (Array.isArray(response?.data)) return response.data;
+  if (Array.isArray(response?.informes)) return response.informes;
+  return [];
+}
+
+const estadoInicial = {
+  nombre: '',
+  regional: '',
+  departamento: '',
+  ciudad: ''
+};
+
+function TiendasPage() {
+  const navigate = useNavigate();
+
+  const token = localStorage.getItem('token');
+  const rolUsuario = (localStorage.getItem('rol') || '').toLowerCase();
+  const isAdminStorage = (localStorage.getItem('isAdmin') || '').toLowerCase();
+
+  const isAdmin =
+    isAdminStorage === 'true' ||
+    isAdminStorage === '1' ||
+    rolUsuario === 'admin';
+
+  const nombreTecnico = localStorage.getItem('nombreTecnico') || 'Admin';
+
+  const [tiendas, setTiendas] = useState([]);
+  const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [tiendaPorEliminar, setTiendaPorEliminar] = useState(null);
+  const [deletingTienda, setDeletingTienda] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+  const [form, setForm] = useState(estadoInicial);
+
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState('');
+  const [historyTienda, setHistoryTienda] = useState(null);
+  const [historyItems, setHistoryItems] = useState([]);
+  const [previewError, setPreviewError] = useState('');
+
+  const tiendasFiltradas = useMemo(() => {
+    const q = limpiarTexto(search).toLowerCase();
+
+    if (!q) return tiendas;
+
+    return tiendas.filter((tienda) => {
+      const texto = [
+        tienda.nombre,
+        tienda.regional,
+        tienda.departamento,
+        tienda.ciudad
+      ].join(' ').toLowerCase();
+
+      return texto.includes(q);
+    });
+  }, [tiendas, search]);
+
+  useEffect(() => {
+    if (!token) {
+      navigate('/');
+      return;
+    }
+
+    if (!isAdmin) {
+      navigate('/dashboard');
+      return;
+    }
+
+    cargarTiendas();
+  }, [isAdmin, navigate, token]);
+
+  async function cargarTiendas() {
+    try {
+      setLoading(true);
+      setError('');
+
+      const response = await http.get('/tiendas');
+      setTiendas(normalizarListaTiendas(response));
+    } catch (err) {
+      setError(obtenerMensajeError(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function abrirCrear() {
+    setEditing(null);
+    setForm(estadoInicial);
+    setError('');
+    setSuccess('');
+    setModalOpen(true);
+  }
+
+  function abrirEditar(tienda) {
+    setEditing(tienda);
+    setForm({
+      nombre: tienda.nombre || '',
+      regional: tienda.regional || '',
+      departamento: tienda.departamento || '',
+      ciudad: tienda.ciudad || ''
+    });
+    setError('');
+    setSuccess('');
+    setModalOpen(true);
+  }
+
+  function cerrarModal() {
+    if (saving) return;
+
+    setModalOpen(false);
+    setEditing(null);
+    setForm(estadoInicial);
+  }
+
+  function actualizarCampo(campo, valor) {
+    setForm((prev) => ({
+      ...prev,
+      [campo]: valor
+    }));
+  }
+
+  async function guardarTienda(e) {
+    e.preventDefault();
+
+    const payload = {
+      nombre: limpiarTexto(form.nombre),
+      regional: limpiarTexto(form.regional),
+      departamento: limpiarTexto(form.departamento),
+      ciudad: limpiarTexto(form.ciudad)
+    };
+
+    if (!payload.nombre || !payload.regional || !payload.departamento || !payload.ciudad) {
+      setError('Todos los campos son obligatorios');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError('');
+      setSuccess('');
+
+      if (editing?._id) {
+        await http.put(`/tiendas/${editing._id}`, payload);
+        setSuccess('Tienda actualizada correctamente');
+      } else {
+        await http.post('/tiendas', payload);
+        setSuccess('Tienda creada correctamente');
+      }
+
+      setModalOpen(false);
+      setEditing(null);
+      setForm(estadoInicial);
+      await cargarTiendas();
+    } catch (err) {
+      setError(obtenerMensajeError(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function eliminarTienda(tienda) {
+    setTiendaPorEliminar(tienda);
+    setDeleteError('');
+    setDeleteConfirmOpen(true);
+  }
+
+  async function confirmarEliminarTienda() {
+    if (!tiendaPorEliminar?._id) return;
+
+    try {
+      setDeletingTienda(true);
+      setDeleteError('');
+      setSuccess('');
+      await http.delete(`/tiendas/${tiendaPorEliminar._id}`);
+      setSuccess('Tienda eliminada correctamente');
+      setDeleteConfirmOpen(false);
+      setTiendaPorEliminar(null);
+      await cargarTiendas();
+    } catch (err) {
+      setDeleteError(obtenerMensajeError(err));
+    } finally {
+      setDeletingTienda(false);
+    }
+  }
+
+  function cancelarEliminarTienda() {
+    if (deletingTienda) return;
+    setDeleteConfirmOpen(false);
+    setTiendaPorEliminar(null);
+    setDeleteError('');
+  }
+
+  async function abrirHistorial(tienda) {
+    setPreviewError('');
+    setHistoryOpen(true);
+    setHistoryTienda(tienda);
+    setHistoryItems([]);
+    setHistoryError('');
+    setHistoryLoading(true);
+
+    try {
+      const response = await http.get(`/informes/tienda/${tienda._id}`, {
+        page: 1,
+        limit: 50
+      });
+
+      setHistoryItems(normalizarListaInformes(response));
+    } catch (err) {
+      setHistoryError(obtenerMensajeError(err));
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
+
+  function cerrarHistorial() {
+    setHistoryOpen(false);
+    setHistoryTienda(null);
+    setHistoryItems([]);
+    setHistoryError('');
+  }
+
+  async function abrirInforme(informe, compartir = false) {
+    setPreviewError('');
+    try {
+      if (compartir) {
+        await compartirInformeWhatsApp(informe._id, `Informe técnico - ${historyTienda?.nombre || ''}`);
+      } else {
+        await abrirVistaPreviaInforme(informe._id);
+      }
+    } catch (error) {
+      setPreviewError(obtenerMensajeError(error));
+    }
+  }
+
+  function handleCerrarSesion() {
+    [
+      'token',
+      'sesionId',
+      'nombreTecnico',
+      'isAdmin',
+      'userId',
+      'usuario',
+      'rol',
+      'dashStep',
+      'numeroIncidencia'
+    ].forEach((key) => localStorage.removeItem(key));
+
+    navigate('/');
+  }
+
+  return (
+    <div className="tiendas-page modern-ui tech-bg">
+      <div className="bg-orb orb-one" />
+      <div className="bg-orb orb-two" />
+
+      <header className="topbar">
+        <div>
+          <p className="eyebrow">Panel administrativo</p>
+          <h1>Tiendas</h1>
+          <p className="muted">Administra las tiendas disponibles para la generación de informes.</p>
+        </div>
+
+        <AppMenu
+          active="tiendas"
+          isAdmin={isAdmin}
+          userName={nombreTecnico}
+          onNavigate={navigate}
+          onLogout={handleCerrarSesion}
+        />
+      </header>
+
+      <main className="dash-container">
+        <section className="hero-card">
+          <div>
+            <p className="eyebrow yellow">Gestión de tiendas</p>
+            <h2>Crear, editar y consultar el historial</h2>
+            <p className="muted">Las tiendas creadas aquí aparecen automáticamente en el selector del Dashboard.</p>
+          </div>
+
+          <button type="button" className="btn primary big" onClick={abrirCrear}><Icon name="plus" />Nueva tienda</button>
+        </section>
+
+        {(error || success) && (
+          <div className={`alert ${error ? 'error' : 'success'}`}>
+            {error || success}
+          </div>
+        )}
+
+        <section className="panel-card">
+          <div className="section-head">
+            <div>
+              <h3>Listado de tiendas</h3>
+              <p className="muted small">Total: {tiendasFiltradas.length}</p>
+            </div>
+
+            <div className="search-wrap">
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar por nombre, regional, departamento o ciudad"
+                autoComplete="off"
+              />
+            </div>
+          </div>
+
+          {loading ? (
+            <div className="empty-state">Cargando tiendas...</div>
+          ) : tiendasFiltradas.length === 0 ? (
+            <div className="empty-state">No hay tiendas para mostrar.</div>
+          ) : (
+            <div className="store-grid">
+              {tiendasFiltradas.map((tienda) => (
+                <article className="store-card" key={tienda._id}>
+                  <div className="store-main">
+                    <span className="store-badge">{tienda.regional || 'Sin regional'}</span>
+                    <h4>{tienda.nombre}</h4>
+                    <p>{tienda.departamento} · {tienda.ciudad}</p>
+                  </div>
+
+                  <div className="store-actions">
+                    <button type="button" className="btn soft" onClick={() => abrirHistorial(tienda)}><Icon name="history" />Historial</button>
+                    <button type="button" className="btn ghost" onClick={() => abrirEditar(tienda)}><Icon name="edit" />Editar</button>
+                    <button type="button" className="btn danger" onClick={() => eliminarTienda(tienda)}><Icon name="trash" />Eliminar</button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+      </main>
+
+      {deleteConfirmOpen && createPortal(
+        <div
+          className="modal-overlay"
+          role="presentation"
+          onClick={cancelarEliminarTienda}
+        >
+          <section
+            className="modal-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-store-title"
+            aria-describedby="delete-store-description"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h3 id="delete-store-title" className="modal-title">Eliminar tienda</h3>
+            <p id="delete-store-description" className="modal-msg">
+              ¿Confirmas que deseas eliminar “{tiendaPorEliminar?.nombre || 'esta tienda'}”?
+              Esta acción no se puede deshacer.
+            </p>
+            {deleteError && <p className="modal-error" role="alert">{deleteError}</p>}
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="btn ghost"
+                onClick={cancelarEliminarTienda}
+                disabled={deletingTienda}
+              >
+                <Icon name="close" />
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="btn danger"
+                onClick={confirmarEliminarTienda}
+                disabled={deletingTienda}
+              >
+                <Icon name="trash" />
+                {deletingTienda ? 'Eliminando...' : 'Eliminar tienda'}
+              </button>
+            </div>
+          </section>
+        </div>,
+        document.body
+      )}
+
+      {modalOpen && createPortal(
+        <div className="modal-backdrop" onMouseDown={cerrarModal}>
+          <div className="modal-card" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <div>
+                <p className="eyebrow yellow">{editing ? 'Editar tienda' : 'Nueva tienda'}</p>
+                <h3>{editing ? editing.nombre : 'Agregar tienda'}</h3>
+              </div>
+              <button type="button" className="icon-btn" onClick={cerrarModal}>×</button>
+            </div>
+
+            <form className="form-grid" onSubmit={guardarTienda}>
+              <label>
+                <span>Nombre de la tienda</span>
+                <input
+                  value={form.nombre}
+                  onChange={(e) => actualizarCampo('nombre', e.target.value)}
+                  placeholder="Ej. D1 Suba Centro"
+                  autoComplete="off"
+                />
+              </label>
+
+              <label>
+                <span>Regional</span>
+                <input
+                  value={form.regional}
+                  onChange={(e) => actualizarCampo('regional', e.target.value)}
+                  placeholder="Ej. Centro"
+                  autoComplete="off"
+                />
+              </label>
+
+              <label>
+                <span>Departamento</span>
+                <input
+                  value={form.departamento}
+                  onChange={(e) => actualizarCampo('departamento', e.target.value)}
+                  placeholder="Ej. Cundinamarca"
+                  autoComplete="off"
+                />
+              </label>
+
+              <label>
+                <span>Ciudad</span>
+                <input
+                  value={form.ciudad}
+                  onChange={(e) => actualizarCampo('ciudad', e.target.value)}
+                  placeholder="Ej. Bogotá"
+                  autoComplete="off"
+                />
+              </label>
+
+              <div className="modal-actions">
+                <button type="button" className="btn ghost" onClick={cerrarModal} disabled={saving}>Cancelar</button>
+                <button type="submit" className="btn primary" disabled={saving}>{saving ? 'Guardando...' : 'Guardar'}</button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {historyOpen && createPortal(
+        <div className="modal-backdrop" onMouseDown={cerrarHistorial}>
+          <div className="modal-card wide" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <div>
+                <p className="eyebrow yellow">Historial por tienda</p>
+                <h3>{historyTienda?.nombre || 'Tienda'}</h3>
+                <p className="muted small">{historyTienda?.departamento} · {historyTienda?.ciudad}</p>
+              </div>
+              <button type="button" className="icon-btn" onClick={cerrarHistorial}>×</button>
+            </div>
+
+            {previewError && <p className="alert error" role="alert">{previewError}</p>}
+            {historyLoading ? (
+              <div className="empty-state">Cargando historial...</div>
+            ) : historyError ? (
+              <div className="alert error">
+                {historyError}
+                <br />
+                Para activar el historial por tienda, agrega el endpoint del backend indicado.
+              </div>
+            ) : historyItems.length === 0 ? (
+              <div className="empty-state">Esta tienda todavía no tiene informes asociados.</div>
+            ) : (
+              <div className="history-list">
+                {historyItems.map((informe) => (
+                    <article className="history-card" key={informe._id}>
+                      <div>
+                        <h4>{informe.title || 'Informe técnico'}</h4>
+                        <p className="muted small">Incidencia: {informe.numeroIncidencia || 'Sin incidencia'}</p>
+                        <p className="muted small">Regional: {informe.regional || historyTienda?.regional || 'Sin regional'}</p>
+                        <p className="muted small">Generado: {formatearFecha(informe.createdAt)}</p>
+                      </div>
+
+                      <div className="history-actions">
+                        {informe._id && (
+                          <>
+                            <button type="button" className="btn soft" onClick={() => abrirInforme(informe)}><Icon name="pdf" />Abrir PDF</button>
+                            <button type="button" className="btn soft" onClick={() => abrirInforme(informe, true)}><Icon name="share" />Compartir por WhatsApp</button>
+                          </>
+                        )}
+                      </div>
+                    </article>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>,
+        document.body
+      )}
+
+      <style>{`
+        * {
+          box-sizing: border-box;
+        }
+
+        body {
+          margin: 0;
+          background: #070b13;
+        }
+
+        .tiendas-page.modern-ui,
+        .tiendas-page {
+          min-height: 100vh;
+          padding: 24px 0 54px;
+          color: #f7f7f7;
+          background:
+            radial-gradient(circle at top left, rgba(255, 242, 0, 0.16), transparent 32%),
+            radial-gradient(circle at bottom right, rgba(35, 90, 255, 0.18), transparent 34%),
+            linear-gradient(135deg, #070b13 0%, #0d1422 48%, #111827 100%);
+          position: relative;
+          overflow-x: hidden;
+          font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+
+        .bg-orb {
+          position: fixed;
+          width: 260px;
+          height: 260px;
+          border-radius: 999px;
+          filter: blur(18px);
+          pointer-events: none;
+          opacity: 0.32;
+        }
+
+        .orb-one {
+          left: -90px;
+          top: 110px;
+          background: rgba(255, 242, 0, 0.18);
+        }
+
+        .orb-two {
+          right: -80px;
+          bottom: 80px;
+          background: rgba(65, 105, 225, 0.22);
+        }
+
+        .topbar,
+        .dash-container {
+          width: min(100% - 32px, 1100px);
+          margin: 0 auto;
+          position: relative;
+          z-index: 1;
+        }
+
+        .topbar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 18px;
+          margin-bottom: 22px;
+        }
+
+        h1,
+        h2,
+        h3,
+        h4,
+        p {
+          margin: 0;
+        }
+
+        h1 {
+          font-size: clamp(32px, 7vw, 58px);
+          line-height: 0.96;
+          letter-spacing: -0.06em;
+        }
+
+        h2 {
+          font-size: clamp(24px, 4vw, 38px);
+          line-height: 1.02;
+          letter-spacing: -0.04em;
+          margin-top: 6px;
+        }
+
+        h3 {
+          font-size: 22px;
+          letter-spacing: -0.03em;
+        }
+
+        h4 {
+          font-size: 18px;
+          letter-spacing: -0.02em;
+        }
+
+        .eyebrow {
+          color: #b8bcc3;
+          font-size: 12px;
+          text-transform: uppercase;
+          letter-spacing: 0.16em;
+          font-weight: 800;
+          margin-bottom: 8px;
+        }
+
+        .yellow {
+          color: #fff200;
+        }
+
+        .muted {
+          color: #b8bcc3;
+          margin-top: 8px;
+          line-height: 1.5;
+        }
+
+        .small {
+          font-size: 13px;
+        }
+
+        .top-actions,
+        .store-actions,
+        .modal-actions,
+        .history-actions {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+
+        .session-chip {
+          min-height: 42px;
+          padding: 0 14px;
+          border-radius: 999px;
+          display: inline-flex;
+          align-items: center;
+          color: #fff;
+          background: rgba(255, 255, 255, 0.08);
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          font-weight: 800;
+        }
+
+        .btn {
+          min-height: 42px;
+          border: 0;
+          border-radius: 14px;
+          padding: 0 16px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          font-weight: 900;
+          text-decoration: none;
+          cursor: pointer;
+          transition: transform 0.18s ease, opacity 0.18s ease, border-color 0.18s ease;
+          color: #fff;
+          white-space: nowrap;
+        }
+
+        .btn:hover {
+          transform: translateY(-1px);
+        }
+
+        .btn:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+          transform: none;
+        }
+
+        .btn.primary {
+          background: #fff200;
+          color: #090909;
+          box-shadow: 0 16px 34px rgba(255, 242, 0, 0.18);
+        }
+
+        .btn.big {
+          min-height: 52px;
+          border-radius: 18px;
+          padding: 0 24px;
+        }
+
+        .btn.ghost {
+          background: rgba(255, 255, 255, 0.08);
+          border: 1px solid rgba(255, 255, 255, 0.14);
+        }
+
+        .btn.soft {
+          background: rgba(255, 242, 0, 0.12);
+          border: 1px solid rgba(255, 242, 0, 0.22);
+          color: #fff200;
+        }
+
+        .btn.danger {
+          background: rgba(255, 80, 80, 0.12);
+          border: 1px solid rgba(255, 80, 80, 0.22);
+          color: #ffb3b3;
+        }
+
+        .hero-card,
+        .panel-card,
+        .store-card,
+        .modal-card,
+        .history-card,
+        .alert,
+        .empty-state {
+          background: rgba(255, 255, 255, 0.08);
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          box-shadow: 0 24px 90px rgba(0, 0, 0, 0.26);
+          backdrop-filter: blur(18px);
+        }
+
+        .hero-card {
+          border-radius: 28px;
+          padding: 26px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 18px;
+          margin-bottom: 18px;
+        }
+
+        .panel-card {
+          border-radius: 28px;
+          padding: 20px;
+        }
+
+        .section-head {
+          display: flex;
+          align-items: flex-end;
+          justify-content: space-between;
+          gap: 16px;
+          margin-bottom: 16px;
+        }
+
+        .search-wrap {
+          width: min(100%, 420px);
+        }
+
+        input {
+          width: 100%;
+          min-height: 48px;
+          border: 1px solid rgba(255, 255, 255, 0.16);
+          background: rgba(255, 255, 255, 0.08);
+          color: #fff;
+          border-radius: 16px;
+          padding: 0 14px;
+          font: inherit;
+          outline: none;
+        }
+
+        input::placeholder {
+          color: #8d94a3;
+        }
+
+        input:focus {
+          border-color: rgba(255, 242, 0, 0.45);
+          box-shadow: 0 0 0 4px rgba(255, 242, 0, 0.12);
+        }
+
+        .alert {
+          border-radius: 18px;
+          padding: 14px 16px;
+          margin-bottom: 16px;
+          font-weight: 800;
+          line-height: 1.4;
+        }
+
+        .alert.error {
+          border-color: rgba(255, 80, 80, 0.24);
+          color: #ffd0d0;
+        }
+
+        .alert.success {
+          border-color: rgba(108, 255, 169, 0.22);
+          color: #c7ffd9;
+        }
+
+        .empty-state {
+          border-radius: 22px;
+          padding: 22px;
+          color: #b8bcc3;
+          text-align: center;
+        }
+
+        .store-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 14px;
+        }
+
+        .store-card {
+          border-radius: 22px;
+          padding: 18px;
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+          justify-content: space-between;
+        }
+
+        .store-main {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+
+        .store-main p {
+          color: #b8bcc3;
+        }
+
+        .store-badge {
+          width: fit-content;
+          min-height: 28px;
+          padding: 0 10px;
+          border-radius: 999px;
+          display: inline-flex;
+          align-items: center;
+          background: rgba(255, 242, 0, 0.12);
+          border: 1px solid rgba(255, 242, 0, 0.22);
+          color: #fff200;
+          font-size: 12px;
+          font-weight: 900;
+        }
+
+        .modal-backdrop {
+          position: fixed;
+          inset: 0;
+          z-index: 9999;
+          padding: 18px;
+          background: rgba(0, 0, 0, 0.68);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .modal-card {
+          width: min(100%, 560px);
+          max-height: min(88vh, 760px);
+          overflow: auto;
+          border-radius: 28px;
+          padding: 20px;
+        }
+
+        .modal-card.wide {
+          width: min(100%, 820px);
+        }
+
+        .modal-head {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 14px;
+          margin-bottom: 18px;
+        }
+
+        .icon-btn {
+          width: 42px;
+          height: 42px;
+          border: 1px solid rgba(255, 255, 255, 0.14);
+          border-radius: 14px;
+          background: rgba(255, 255, 255, 0.08);
+          color: #fff;
+          font-size: 26px;
+          line-height: 1;
+          cursor: pointer;
+        }
+
+        .form-grid {
+          display: grid;
+          gap: 14px;
+        }
+
+        label {
+          display: grid;
+          gap: 8px;
+          color: #d6d8de;
+          font-size: 13px;
+          font-weight: 800;
+        }
+
+        .modal-actions {
+          justify-content: flex-end;
+          margin-top: 6px;
+        }
+
+        .history-list {
+          display: grid;
+          gap: 12px;
+        }
+
+        .history-card {
+          border-radius: 18px;
+          padding: 16px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 14px;
+        }
+
+        @media (max-width: 780px) {
+          .hero-card,
+          .section-head,
+          .history-card {
+            flex-direction: column;
+            align-items: stretch;
+          }
+
+          .top-actions,
+          .store-actions,
+          .modal-actions,
+          .history-actions {
+            align-items: stretch;
+            flex-direction: column;
+          }
+
+          .top-actions .btn,
+          .store-actions .btn,
+          .modal-actions .btn,
+          .history-actions .btn {
+            width: 100%;
+          }
+
+          .tiendas-page .topbar {
+            flex-direction: row;
+            align-items: center;
+          }
+
+          .search-wrap {
+            width: 100%;
+          }
+
+          .store-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .hero-card,
+          .panel-card,
+          .modal-card {
+            border-radius: 24px;
+          }
+        }
+
+        @media (max-width: 900px) {
+          .tiendas-page .topbar {
+            align-items: center;
+          }
+
+          .top-actions {
+            justify-content: flex-end;
+          }
+
+          .hero-card {
+            align-items: flex-start;
+          }
+
+          .store-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        @media (max-width: 780px) {
+          .tiendas-page {
+            padding: 18px 0 calc(34px + env(safe-area-inset-bottom));
+          }
+
+          .topbar,
+          .dash-container {
+            width: min(100% - 24px, 1100px);
+          }
+
+          .topbar {
+            gap: 14px;
+            margin-bottom: 16px;
+          }
+
+          h1 {
+            font-size: clamp(34px, 13vw, 48px);
+            line-height: 0.98;
+          }
+
+          h2 {
+            font-size: clamp(24px, 8vw, 34px);
+          }
+
+          h3 {
+            font-size: 20px;
+          }
+
+          h4 {
+            font-size: 17px;
+          }
+
+          .muted {
+            font-size: 14px;
+          }
+
+          .top-actions {
+            width: 100%;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+          }
+
+          .session-chip {
+            grid-column: 1 / -1;
+            justify-content: center;
+            min-height: 44px;
+          }
+
+          .btn {
+            min-height: 48px;
+            border-radius: 16px;
+            padding: 0 14px;
+            font-size: 14px;
+          }
+
+          .btn.big {
+            width: 100%;
+            min-height: 54px;
+          }
+
+          .hero-card {
+            padding: 20px;
+            gap: 18px;
+            margin-bottom: 14px;
+          }
+
+          .panel-card {
+            padding: 16px;
+          }
+
+          .section-head {
+            gap: 14px;
+            margin-bottom: 14px;
+          }
+
+          input {
+            min-height: 52px;
+            border-radius: 16px;
+            font-size: 16px;
+          }
+
+          .store-card {
+            padding: 16px;
+            border-radius: 20px;
+            gap: 14px;
+          }
+
+          .store-actions {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 10px;
+          }
+
+          .store-actions .btn {
+            width: 100%;
+          }
+
+          .modal-backdrop {
+            align-items: flex-end;
+            padding: 12px;
+          }
+
+          .modal-card {
+            width: 100%;
+            max-height: 88vh;
+            border-radius: 24px 24px 18px 18px;
+            padding: 18px;
+          }
+
+          .modal-card.wide {
+            width: 100%;
+          }
+
+          .modal-head {
+            gap: 12px;
+            margin-bottom: 16px;
+          }
+
+          .icon-btn {
+            flex: 0 0 auto;
+          }
+
+          .form-grid {
+            gap: 12px;
+          }
+
+          .modal-actions {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 10px;
+          }
+
+          .history-card {
+            align-items: stretch;
+            padding: 14px;
+          }
+
+          .history-actions {
+            width: 100%;
+          }
+
+          .history-actions .btn {
+            width: 100%;
+          }
+
+          .alert,
+          .empty-state {
+            border-radius: 18px;
+            padding: 16px;
+            font-size: 14px;
+          }
+        }
+
+        @media (max-width: 520px) {
+          .top-actions {
+            grid-template-columns: 1fr;
+          }
+
+          .hero-card,
+          .panel-card {
+            border-radius: 22px;
+          }
+
+          .store-main {
+            gap: 7px;
+          }
+
+          .store-badge {
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          }
+
+          .modal-card {
+            max-height: 90vh;
+            padding: 16px;
+          }
+        }
+
+        @media (max-width: 420px) {
+          .topbar,
+          .dash-container {
+            width: min(100% - 22px, 1100px);
+          }
+
+          .tiendas-page {
+            padding-top: 16px;
+          }
+
+          .hero-card,
+          .panel-card {
+            padding: 14px;
+          }
+
+          .store-card,
+          .history-card {
+            padding: 14px;
+          }
+
+          .eyebrow {
+            font-size: 11px;
+          }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+export default TiendasPage;
