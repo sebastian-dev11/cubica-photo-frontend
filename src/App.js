@@ -4,16 +4,19 @@ import DashboardPage from './pages/DashboardPage';
 import InformesPage from './pages/InformesPage';
 import UsuariosPage from './pages/UsuariosPage';
 import TiendasPage from './pages/TiendasPage';
+import RequireSession from './components/RequireSession';
 
 function App() {
   return (
     <Router>
       <Routes>
         <Route path="/" element={<LoginPage />} />
-        <Route path="/dashboard" element={<DashboardPage />} />
-        <Route path="/informes" element={<InformesPage />} />
-        <Route path="/usuarios" element={<UsuariosPage />} />
-        <Route path="/tiendas" element={<TiendasPage />} />
+        <Route element={<RequireSession />}>
+          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/informes" element={<InformesPage />} />
+          <Route path="/usuarios" element={<UsuariosPage />} />
+          <Route path="/tiendas" element={<TiendasPage />} />
+        </Route>
       </Routes>
     </Router>
   );

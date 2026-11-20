@@ -238,7 +238,12 @@ Los scripts Vite existentes no forman parte de este despliegue.
 - Preparación, carga y generación bloquean edición, navegación del flujo,
   reinicio y cierre de sesión incompatibles. Los errores HTTP diferencian
   autenticación, permisos, validación, tamaño, servidor y conexión.
-  Un 401 no redirige automáticamente borrando el estado del formulario.
+  Un 401 de una solicitud autenticada limpia las credenciales locales y redirige
+  al login (`/`) sin reintentar la operación. Los errores 403, de conexión y de
+  servidor no cierran la sesión. El login queda excluido de esta redirección.
+  Todas las rutas privadas validan el token antes de montar sus páginas; si
+  el JWT incluye `exp`, también se vigila su vencimiento sin interacción y al
+  recuperar el foco o volver a una pestaña suspendida.
 - No hay reintentos automáticos de cargas ni de `GET /pdf/generar`, que
   **crea** un informe aunque utilice GET.
 - Si la generación pierde la respuesta, vence o recibe un fallo de servidor,

@@ -2,6 +2,7 @@ import { http, resultadoIncierto } from './http';
 import { login } from './authService';
 import { generarInforme } from './informesService';
 import { API_URL } from './apiConfig';
+import { SESSION_EXPIRED_EVENT } from './sessionService';
 
 const response = (status, data) => ({ status, ok: status < 400, text: async () => JSON.stringify(data) });
 
@@ -29,7 +30,7 @@ test('login utiliza el mismo cliente y no envía un token antiguo', async () => 
 });
 
 test.each([
-  [401, 'authentication'], [403, 'permission'], [422, 'validation'],
+  [403, 'permission'], [422, 'validation'],
   [413, 'size'], [500, 'server'], [408, 'timeout']
 ])('diferencia HTTP %s sin borrar la sesión ni repetir solicitudes', async (status, kind) => {
   localStorage.setItem('token', 'retained');
@@ -37,6 +38,71 @@ test.each([
   await expect(http.post('/acta/subir', new FormData())).rejects.toMatchObject({ kind, response: { status } });
   expect(fetch).toHaveBeenCalledTimes(1);
   expect(localStorage.getItem('token')).toBe('retained');
+});
+
+test('un 401 autenticado elimina la sesión, notifica la redirección y no reintenta', async () => {
+  localStorage.setItem('token', 'expired-token');
+  localStorage.setItem('sesionId', 'old-session');
+  const dispatch = jest.spyOn(window, 'dispatchEvent');
+  try {
+    fetch.mockResolvedValue(response(401, { mensaje: 'Token expirado' }));
+    await expect(http.post('/acta/subir', new FormData())).rejects.toMatchObject({
+      kind: 'authentication', response: { status: 401 }
+    });
+    expect(localStorage.getItem('token')).toBeNull();
+    expect(localStorage.getItem('sesionId')).toBeNull();
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: SESSION_EXPIRED_EVENT }));
+    expect(fetch).toHaveBeenCalledTimes(1);
+  } finally {
+    dispatch.mockRestore();
+  }
+});
+
+test('un 401 del login no invalida otra sesión ni dispara una redirección', async () => {
+  localStorage.setItem('token', 'retained');
+  const dispatch = jest.spyOn(window, 'dispatchEvent');
+  try {
+    fetch.mockResolvedValue(response(401, { mensaje: 'Credenciales incorrectas' }));
+    await expect(login('usuario', 'incorrecta')).rejects.toMatchObject({
+      kind: 'authentication', response: { status: 401 }
+    });
+    expect(localStorage.getItem('token')).toBe('retained');
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledTimes(1);
+  } finally {
+    dispatch.mockRestore();
+  }
+});
+
+test('no envía solicitudes con un JWT que ya ha vencido', async () => {
+  const payload = btoa(JSON.stringify({ exp: Math.floor(Date.now() / 1000) - 1 }));
+  localStorage.setItem('token', `header.${payload}.signature`);
+  await expect(http.get('/tiendas')).rejects.toMatchObject({
+    kind: 'authentication', response: { status: 401 }
+  });
+  expect(localStorage.getItem('token')).toBeNull();
+  expect(fetch).not.toHaveBeenCalled();
+});
+
+test('un token antiguo y vencido no bloquea una solicitud pública de login', async () => {
+  localStorage.setItem('token', `header.${btoa(JSON.stringify({ exp: 0 }))}.signature`);
+  fetch.mockResolvedValue(response(200, { token: 'new-token' }));
+  await expect(login('usuario', 'clave')).resolves.toMatchObject({ token: 'new-token' });
+  expect(fetch.mock.calls[0][1].headers.has('Authorization')).toBe(false);
+});
+
+test('un 401 tardío de una solicitud anterior no elimina el token de un nuevo login', async () => {
+  localStorage.setItem('token', 'old-token');
+  let resolve;
+  fetch.mockImplementation(() => new Promise((res) => { resolve = res; }));
+  const pending = http.get('/tiendas');
+  localStorage.setItem('token', 'new-token');
+  localStorage.setItem('sesionId', 'new-session');
+  resolve(response(401, { mensaje: 'Token antiguo' }));
+
+  await expect(pending).rejects.toMatchObject({ kind: 'authentication' });
+  expect(localStorage.getItem('token')).toBe('new-token');
+  expect(localStorage.getItem('sesionId')).toBe('new-session');
 });
 
 test('una desconexión es incierta y no reintenta ni siquiera GET /pdf/generar', async () => {

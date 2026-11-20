@@ -1,4 +1,5 @@
 import { API_URL, API_TIMEOUTS } from './apiConfig';
+import { expireSession, isTokenExpired } from './sessionService';
 
 function getToken() {
   return localStorage.getItem('token');
@@ -85,6 +86,11 @@ export function resultadoIncierto(error) {
 
 async function request(path, options = {}) {
   const token = options.auth === false ? null : getToken();
+  if (token && isTokenExpired(token)) {
+    expireSession(token);
+    throw crearError(null, 401);
+  }
+
   const isFormData = options.body instanceof FormData;
 
   const headers = new Headers({
@@ -133,7 +139,9 @@ async function request(path, options = {}) {
     if (!response.ok) throw crearError(data, response.status);
     return data;
   } catch (error) {
-    // No redirigir al recibir 401: se perderían la selección y los éxitos parciales.
+    if (options.auth !== false && error.response?.status === 401) {
+      expireSession(token);
+    }
     if (error.response) throw error;
     if (callerSignal?.aborted && !timeoutReached) throw crearErrorCancelacion();
     throw crearError(null, 0, timeoutReached ? 'timeout' : 'connection');
